@@ -187,6 +187,18 @@ title.Font = Enum.Font.SourceSansBold
 title.TextSize = 15
 title.Parent = frame
 
+-- ADDED: Version Status Indicator Dot (Top-Right Corner)
+local statusDot = Instance.new("Frame")
+statusDot.Size = UDim2.new(0, 10, 0, 10)
+statusDot.Position = UDim2.new(1, -20, 0, 10)
+statusDot.BackgroundColor3 = Color3.fromRGB(0, 255, 0) -- Bright Green indicates fully updated script version
+statusDot.BorderSizePixel = 0
+statusDot.Parent = frame
+
+local dotCorner = Instance.new("UICorner")
+dotCorner.CornerRadius = UDim.new(1, 0) -- Rounds the frame into a perfect circle
+dotCorner.Parent = statusDot
+
 -- Panels Division
 local slotPanel = Instance.new("ScrollingFrame") -- Column 1 (Left)
 slotPanel.Size = UDim2.new(0, 180, 0, 275)
