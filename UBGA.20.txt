@@ -1,4 +1,5 @@
--- Upper Body Mesh & Model Customizer (R6 Wide Layout Edition + Part Inspector)
+lua
+-- Upper Body Mesh & Model Customizer (R6 Wide Layout Edition + Physics Fixed Inspector)
 -- Auto-Execute Compatible with Multi-Slot, Preset Saves & Raw Models
 repeat task.wait() until game:IsLoaded()
 
@@ -22,8 +23,9 @@ local selectedIndex = 1
 -- Part Inspector Core Tracking States
 local isExploded = false
 local originalPositions = {}
+local originalAnchoredStates = {} -- Remembers if a part was naturally anchored
 local activeTweens = {}
-local EXPLODE_DISTANCE = 4.0 -- Adjust this value to push parts further apart or closer together
+local EXPLODE_DISTANCE = 4.0 
 
 -- Utility function to completely clean up physical objects
 local function clearPhysicalAccessories()
@@ -36,6 +38,7 @@ local function clearPhysicalAccessories()
 		end
 	end
 	table.clear(originalPositions)
+	table.clear(originalAnchoredStates)
 	isExploded = false
 end
 
@@ -134,7 +137,7 @@ sgui.ResetOnSpawn = false
 sgui.Parent = player:WaitForChild("PlayerGui")
 
 local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(0, 110, 0, 40) -- Slightly larger touch target for mobile thumbs
+toggleBtn.Size = UDim2.new(0, 110, 0, 40)
 toggleBtn.Position = UDim2.new(0, 10, 0, 10)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -330,7 +333,7 @@ applyBtn.TextSize = 14
 applyBtn.Parent = editPanel
 applyBtn.MouseButton1Click:Connect(applyAllAccessories)
 
--- NEW: Mobile-Friendly Part Explosion / Inspector Button (Placed dynamically below controls)
+-- Mobile-Friendly Part Explosion / Inspector Button
 local inspectBtn = Instance.new("TextButton")
 inspectBtn.Size = UDim2.new(0, 315, 0, 32)
 inspectBtn.Position = UDim2.new(0, 0, 0, 242)
@@ -350,12 +353,11 @@ local inspectBtnCorner = Instance.new("UICorner")
 inspectBtnCorner.CornerRadius = UDim.new(0, 6)
 inspectBtnCorner.Parent = inspectBtn
 
--- Core Inspection Engine Logic
+-- Core Inspection Engine Logic (With Gravity Anti-Fall Safeguards)
 local function togglePartExplosion()
 	local character = player.Character
 	if not character then return end
 
-	-- Clean up old tweens if they are running
 	for _, tween in ipairs(activeTweens) do
 		tween:Cancel()
 	end
@@ -364,49 +366,46 @@ local function togglePartExplosion()
 	isExploded = not isExploded
 
 	if isExploded then
-		-- Update Button Appearance to Exploded State
 		inspectBtn.Text = "COMBINE CUSTOM MODELS"
 		inspectBtn.BackgroundColor3 = Color3.fromRGB(150, 35, 35)
 		inspectBtnStroke.Color = Color3.fromRGB(255, 100, 100)
 
-		-- Scan and break down every single custom item currently welded to character
 		table.clear(originalPositions)
+		table.clear(originalAnchoredStates)
+		
+		-- 1. Scan and instantly lock down physics properties
 		for _, child in ipairs(character:GetChildren()) do
 			if child:IsA("Accessory") and string.sub(child.Name, 1, 11) == "CustomBody_" then
 				local handle = child:FindFirstChild("Handle")
 				if handle then
-					-- Cache the base CFrame assembly
 					originalPositions[handle] = handle.CFrame
-					
-					-- Track multi-part setups within this accessory slot
+					originalAnchoredStates[handle] = handle.Anchored
+					handle.Anchored = true -- Freeze it in space so gravity cannot pull it down
+
 					for _, subPart in ipairs(child:GetDescendants()) do
-						if subPart:IsA("BasePart") and subPart ~= handle then
+						if subPart:IsA("BasePart") then
 							originalPositions[subPart] = subPart.CFrame
+							originalAnchoredStates[subPart] = subPart.Anchored
+							subPart.Anchored = true -- Freeze all multi-model sub-elements
 						end
 					end
 				end
 			end
 		end
 
-		-- Run Outward Explode Vector Calculations
+		-- 2. Break connection structures and animate outwards
 		for part, origCFrame in pairs(originalPositions) do
 			if part and part.Parent then
-				-- Temporary physics override to let parts float out cleanly
-				local originalMassless = part.Massless
-				part.Massless = true
-				
-				-- Destroy physical connection constraints temporarily during look-around
 				local innerWeld = part:FindFirstChild("ModelInnerWeld") or part:FindFirstChild("AccessoryWeld")
 				if innerWeld then innerWeld.Enabled = false end
 
-				-- Calculate center offset projection relative to the local character model root
 				local parentAccessory = part:FindFirstAncestorOfClass("Accessory")
 				local handle = parentAccessory and parentAccessory:FindFirstChild("Handle")
 				local centerPos = handle and handle.Position or character:GetPivot().Position
 				
 				local direction = (part.Position - centerPos).Unit
 				if direction.Magnitude == 0 or tostring(direction) == "NAN, NAN, NAN" then
-					direction = Vector3.new(0, 1, 0) -- Fallback vertical separation logic
+					direction = Vector3.new(0, 1, 0)
 				end
 
 				local explodedPosition = origCFrame.Position + (direction * EXPLODE_DISTANCE)
@@ -418,21 +417,29 @@ local function togglePartExplosion()
 			end
 		end
 	else
-		-- Update Button Appearance back to Closed State
 		inspectBtn.Text = "INSPECT INDIVIDUAL PARTS"
 		inspectBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
 		inspectBtnStroke.Color = Color3.fromRGB(0, 150, 255)
 
-		-- Smoothly return parts to original weld placement profiles
+		-- 3. Snap back smoothly and cleanly hand control back over to character joints
+		local totalTweens = 0
+		local completedTweens = 0
+
 		for part, origCFrame in pairs(originalPositions) do
 			if part and part.Parent then
+				totalTweens = totalTweens + 1
 				local tween = TweenService:Create(part, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {CFrame = origCFrame})
 				table.insert(activeTweens, tween)
 				
 				tween.Completed:Connect(function()
-					if not isExploded and part and part.Parent then
+					completedTweens = completedTweens + 1
+					-- Once the part returns to its home position, reconnect the joints safely
+					if part and part.Parent then
 						local innerWeld = part:FindFirstChild("ModelInnerWeld") or part:FindFirstChild("AccessoryWeld")
 						if innerWeld then innerWeld.Enabled = true end
+						
+						-- Restore original non-anchored status so it sticks to your character walk animations
+						part.Anchored = originalAnchoredStates[part] or false
 					end
 				end)
 				tween:Play()
@@ -627,3 +634,4 @@ if player.Character then
 	task.spawn(applyAllAccessories)
 end
 
+```
