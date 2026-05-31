@@ -472,4 +472,4 @@ end)
 
 if player.Character then
 	task.spawn(applyAllAccessories)
-end
+end)
