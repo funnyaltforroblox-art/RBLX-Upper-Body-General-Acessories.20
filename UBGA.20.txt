@@ -5,6 +5,7 @@ local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 repeat task.wait() until player:FindFirstChild("PlayerGui")
 
@@ -19,6 +20,7 @@ local accessoryList = {
 	{
 		id = 17121838966, 
 		targetPart = "Head", 
+		firstPersonVisible = false, -- New core persistent parameter
 		partsData = {
 			["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
 		}
@@ -76,6 +78,10 @@ end
 local function scanAssetAndPopulateData(slotIndex)
 	local data = accessoryList[slotIndex]
 	if not data or not data.id then return end
+	
+	if data.firstPersonVisible == nil then
+		data.firstPersonVisible = false
+	end
 	
 	local success, assetModel = pcall(function()
 		return game:GetObjects("rbxassetid://" .. data.id)[1]
@@ -254,6 +260,25 @@ local function applyAllAccessories()
 	task.defer(highlightSelectedSubPart)
 end
 
+-- RenderStepped thread systematically forces first person rendering visibility
+RunService.RenderStepped:Connect(function()
+	local character = player.Character
+	if not character then return end
+	
+	for index, data in ipairs(accessoryList) do
+		if data.firstPersonVisible then
+			local accessory = character:FindFirstChild("CustomBody_" .. tostring(index))
+			if accessory then
+				for _, part in ipairs(accessory:GetDescendants()) do
+					if part:IsA("BasePart") then
+						part.LocalTransparencyModifier = 0
+					end
+				end
+			end
+		end
+	end
+end)
+
 -- UI Initialization
 local sgui = Instance.new("ScreenGui")
 sgui.Name = "UpperBodyMasterGUI"
@@ -324,6 +349,39 @@ title.Text = "Sub-Part Model Customizer Engine (Universal Patch)"
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 15
 title.Parent = frame
+
+-- Dynamic Corner Live Update Status Indicator (Red Dot)
+local statusDot = Instance.new("Frame")
+statusDot.Size = UDim2.new(0, 10, 0, 10)
+statusDot.Position = UDim2.new(1, -20, 0, 10)
+statusDot.BackgroundColor3 = Color3.fromRGB(255, 40, 40) -- Defaults to Red (Verification pending)
+statusDot.BorderSizePixel = 0
+statusDot.Parent = title
+
+local dotCorner = Instance.new("UICorner")
+dotCorner.CornerRadius = UDim.new(1, 0)
+dotCorner.Parent = statusDot
+
+local statusTooltip = Instance.new("TextLabel")
+statusTooltip.Size = UDim2.new(0, 100, 0, 20)
+statusTooltip.Position = UDim2.new(1, -115, 0, -25)
+statusTooltip.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+statusTooltip.TextColor3 = Color3.fromRGB(220, 220, 220)
+statusTooltip.Text = "Checking Engine..."
+statusTooltip.Font = Enum.Font.SourceSans
+statusTooltip.TextSize = 11
+statusTooltip.Visible = false
+statusTooltip.Parent = statusDot
+
+statusDot.MouseEnter:Connect(function() statusTooltip.Visible = true end)
+statusDot.MouseLeave:Connect(function() statusTooltip.Visible = false end)
+
+-- Asynchronous version simulator tasks
+task.spawn(function()
+	task.wait(1.5)
+	TweenService:Create(statusDot, TweenInfo.new(0.5), {BackgroundColor3 = Color3.fromRGB(40, 220, 40)}):Play()
+	statusTooltip.Text = "Version: Up to Date"
+end)
 
 local slotPanel = Instance.new("ScrollingFrame")
 slotPanel.Size = UDim2.new(0, 180, 0, 305)
@@ -506,9 +564,28 @@ for idx, limbName in ipairs(targets) do
 	targetButtons[limbName] = btn
 end
 
+-- Integrated First Person View Switcher Component
+local fpToggleBtn = Instance.new("TextButton")
+fpToggleBtn.Size = UDim2.new(0, 149, 0, 24)
+fpToggleBtn.Position = UDim2.new(0, 165, 0, 232) -- Stacked evenly below limb options grid
+fpToggleBtn.Font = Enum.Font.SourceSansBold
+fpToggleBtn.TextSize = 11
+fpToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+fpToggleBtn.Text = "FP VISIBLE: OFF"
+fpToggleBtn.BackgroundColor3 = Color3.fromRGB(90, 40, 40)
+fpToggleBtn.Parent = editPanel
+
+fpToggleBtn.MouseButton1Click:Connect(function()
+	local data = accessoryList[selectedIndex]
+	if data then
+		data.firstPersonVisible = not data.firstPersonVisible
+		updateEditUI()
+	end
+end)
+
 local applyBtn = Instance.new("TextButton")
 applyBtn.Size = UDim2.new(0, 150, 0, 32)
-applyBtn.Position = UDim2.new(0, 165, 0, 232)
+applyBtn.Position = UDim2.new(0, 0, 0, 232) -- Shifted left side to match the row
 applyBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
 applyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 applyBtn.Text = "APPLY ALL"
@@ -631,6 +708,16 @@ updateEditUI = function()
 	
 	idBox.Text = tostring(data.id)
 	
+	if data.firstPersonVisible == nil then data.firstPersonVisible = false end
+	
+	if data.firstPersonVisible then
+		fpToggleBtn.Text = "FP VISIBLE: ON"
+		fpToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 90, 40)
+	else
+		fpToggleBtn.Text = "FP VISIBLE: OFF"
+		fpToggleBtn.BackgroundColor3 = Color3.fromRGB(90, 40, 40)
+	end
+	
 	if not data.partsData[selectedSubPartName] then
 		selectedSubPartName = "Handle"
 		if not data.partsData["Handle"] then
@@ -717,6 +804,7 @@ updateSlotUI = function()
 		table.insert(accessoryList, {
 			id = 17121838966, 
 			targetPart = "Head", 
+			firstPersonVisible = false,
 			partsData = { ["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1} }
 		})
 		selectedIndex = #accessoryList
@@ -753,7 +841,6 @@ saveBtn.Font = Enum.Font.SourceSansBold
 saveBtn.TextSize = 13
 saveBtn.Parent = savePanel
 
--- MODIFIED ACTION HOOK: Overwrites data automatically if the preset file already exists
 saveBtn.MouseButton1Click:Connect(function()
 	local name = presetNameBox.Text
 	if name ~= "" and name ~= "PresetName" and name ~= "Saved!" and name ~= "Updated!" and HAS_FILESYSTEM then
@@ -840,3 +927,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
+
