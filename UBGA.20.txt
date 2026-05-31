@@ -1,5 +1,5 @@
--- Upper Body Mesh & Model Customizer (R6 Wide Layout Edition + Safe Architecture)
--- Auto-Execute Compatible with Multi-Slot & Environment Safeguards
+-- Upper Body Mesh & Model Customizer (R6 Wide Layout - Individual Sub-Part Engine + Visual Highlight)
+-- Auto-Execute Compatible with Multi-Slot, Nested Presets, & Physics Safeguards
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -17,11 +17,18 @@ if HAS_FILESYSTEM then
 	pcall(function() makefolder(FOLDER_NAME) end)
 end
 
--- Global Core States
+-- Global Core States (Nested Part Data Array Structure)
 local accessoryList = {
-	{id = 17121838966, targetPart = "Head", offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
+	{
+		id = 17121838966, 
+		targetPart = "Head", 
+		partsData = {
+			["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
+		}
+	}
 }
 local selectedIndex = 1
+local selectedSubPartName = "Handle"
 
 -- Part Inspector Core Tracking States
 local isExploded = false
@@ -30,8 +37,52 @@ local originalAnchoredStates = {}
 local activeTweens = {}
 local EXPLODE_DISTANCE = 4.0 
 
+-- Visual Highlight Tracking Pointer
+local currentHighlightBox = nil
+
+-- Cleans up any existing target highlights safely
+local function clearActiveHighlight()
+	if currentHighlightBox then
+		currentHighlightBox:Destroy()
+		currentHighlightBox = nil
+	end
+end
+
+-- Locates the physical part instance by name inside the current slot's accessory structure
+local function findPhysicalPartInCharacter(slotIndex, partName)
+	local character = player.Character
+	if not character then return nil end
+	
+	local accessory = character:FindFirstChild("CustomBody_" .. tostring(slotIndex))
+	if not accessory then return nil end
+	
+	if partName == "Handle" then
+		return accessory:FindFirstChild("Handle")
+	else
+		return accessory:FindFirstChild(partName, true)
+	end
+end
+
+-- Generates or moves a vibrant cyan bounding box onto the chosen active sub-component
+local function highlightSelectedSubPart()
+	clearActiveHighlight()
+	
+	local targetPartInstance = findPhysicalPartInCharacter(selectedIndex, selectedSubPartName)
+	if targetPartInstance and targetPartInstance:IsA("BasePart") then
+		local selectionBox = Instance.new("SelectionBox")
+		selectionBox.Name = "Customizer_PartHighlight"
+		selectionBox.Color3 = Color3.fromRGB(0, 255, 255) -- Pure Cyan
+		selectionBox.LineThickness = 0.04
+		selectionBox.Adornee = targetPartInstance
+		selectionBox.Parent = targetPartInstance
+		
+		currentHighlightBox = selectionBox
+	end
+end
+
 -- Utility function to completely clean up physical objects
 local function clearPhysicalAccessories()
+	clearActiveHighlight()
 	local character = player.Character
 	if character then
 		for _, child in ipairs(character:GetChildren()) do
@@ -45,7 +96,7 @@ local function clearPhysicalAccessories()
 	isExploded = false
 end
 
--- Render the physical objects onto the character model
+-- Render the physical objects onto the character model with Sub-Part transformations
 local function applyAllAccessories()
 	local character = player.Character
 	if not character then return end
@@ -69,25 +120,34 @@ local function applyAllAccessories()
 				end
 				
 				if handle then
-					handle.Anchored = false
+					handle.Name = "Handle"
+					
+					-- Track down and dynamically parse unique component descriptors inside multi-mesh models
+					for _, obj in ipairs(assetModel:GetDescendants()) do
+						if obj:IsA("BasePart") then
+							if not data.partsData[obj.Name] then
+								data.partsData[obj.Name] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
+							end
+						end
+					end
+
+					-- Apply specific multi-dimensional dimension scales directly to geometry layers
 					for _, obj in ipairs(assetModel:GetDescendants()) do
 						if obj:IsA("BasePart") then
 							obj.Anchored = false
 							obj.CanCollide = false
 							obj.Massless = true
+							
+							local pData = data.partsData[obj.Name] or {scaleX=1, scaleY=1, scaleZ=1}
+							local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
+							if mesh then
+								mesh.Scale = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
+							elseif obj:IsA("MeshPart") or not mesh then
+								obj.Size = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
+							end
 						elseif obj:IsA("Weld") or obj:IsA("ManualWeld") or obj:IsA("WeldConstraint") or obj:IsA("Attachment") then
 							obj:Destroy()
-						elseif obj:IsA("SpecialMesh") then
-							obj.Scale = Vector3.new(data.scaleX, data.scaleY, data.scaleZ)
 						end
-					end
-					
-					handle.Name = "Handle"
-					handle.CanCollide = false
-					handle.Massless = true
-					
-					if handle:IsA("MeshPart") or not handle:FindFirstChildWhichIsA("SpecialMesh") then
-						handle.Size = Vector3.new(data.scaleX, data.scaleY, data.scaleZ)
 					end
 					
 					local accessory = Instance.new("Accessory")
@@ -96,10 +156,15 @@ local function applyAllAccessories()
 					if assetModel:IsA("Model") then
 						for _, obj in ipairs(assetModel:GetDescendants()) do
 							if obj:IsA("BasePart") and obj ~= handle then
-								local innerWeld = Instance.new("WeldConstraint")
+								local pData = data.partsData[obj.Name]
+								local innerWeld = Instance.new("Weld")
 								innerWeld.Name = "ModelInnerWeld"
 								innerWeld.Part0 = obj
 								innerWeld.Part1 = handle
+								
+								local posOffset = CFrame.new(pData.offsetX, pData.offsetY, pData.offsetZ)
+								local rotOffset = CFrame.Angles(math.rad(pData.rotateX), math.rad(pData.rotateY), math.rad(pData.rotateZ))
+								innerWeld.C0 = posOffset * rotOffset
 								innerWeld.Parent = obj
 							end
 						end
@@ -113,13 +178,14 @@ local function applyAllAccessories()
 						handle.Parent = accessory
 					end
 					
+					local rootData = data.partsData["Handle"] or {offsetX=0, offsetY=0, offsetZ=0, rotateX=0, rotateY=0, rotateZ=0}
 					local weld = Instance.new("Weld")
 					weld.Name = "AccessoryWeld"
 					weld.Part0 = handle
 					weld.Part1 = limb
 					
-					local positionOffset = CFrame.new(data.offsetX, data.offsetY, data.offsetZ)
-					local rotationOffset = CFrame.Angles(math.rad(data.rotateX), math.rad(data.rotateY), math.rad(data.rotateZ))
+					local positionOffset = CFrame.new(rootData.offsetX, rootData.offsetY, rootData.offsetZ)
+					local rotationOffset = CFrame.Angles(math.rad(rootData.rotateX), math.rad(rootData.rotateY), math.rad(rootData.rotateZ))
 					
 					weld.C0 = positionOffset * rotationOffset
 					weld.Parent = handle
@@ -129,6 +195,9 @@ local function applyAllAccessories()
 			end
 		end
 	end
+	
+	-- Refresh visual highlighter bounds context following component canvas update steps
+	task.defer(highlightSelectedSubPart)
 end
 
 -- UI Initialization
@@ -153,8 +222,8 @@ mainBtnCorner.Parent = toggleBtn
 
 -- Wide Interface Container (720px for 3 Columns)
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 720, 0, 320)
-frame.Position = UDim2.new(0.5, -360, 0.5, -160)
+frame.Size = UDim2.new(0, 720, 0, 350)
+frame.Position = UDim2.new(0.5, -360, 0.5, -175)
 frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 frame.BorderSizePixel = 2
 frame.Visible = true
@@ -172,54 +241,54 @@ toggleBtn.InputBegan:Connect(function(input)
 		dragging = true
 		dragStart = input.Position
 		startPos = toggleBtn.Position
-		
 		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then
-				dragging = false
-			end
+			if input.UserInputState == Enum.UserInputState.End then dragging = false end
 		end)
 	end
 end)
 
 toggleBtn.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		dragInput = input
-	end
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
-	if input == dragInput and dragging then
-		updateDrag(input)
-	end
+	if input == dragInput and dragging then updateDrag(input) end
 end)
 
-toggleBtn.MouseButton1Click:Connect(function() frame.Visible = not frame.Visible end)
+toggleBtn.MouseButton1Click:Connect(function() 
+	frame.Visible = not frame.Visible 
+	if not frame.Visible then
+		clearActiveHighlight() -- Hide highlights while working without UI visibility active
+	else
+		highlightSelectedSubPart()
+	end
+end)
 
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Text = "Upper Body Mesh & Model Customizer (Head / Torso / Shoulders)"
+title.Text = "Sub-Part Model Customizer Engine (With Active Component Highlighter)"
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 15
 title.Parent = frame
 
 -- Panels Division
-local slotPanel = Instance.new("ScrollingFrame") -- Column 1 (Left)
-slotPanel.Size = UDim2.new(0, 180, 0, 275)
+local slotPanel = Instance.new("ScrollingFrame")
+slotPanel.Size = UDim2.new(0, 180, 0, 305)
 slotPanel.Position = UDim2.new(0, 10, 0, 35)
 slotPanel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 slotPanel.CanvasSize = UDim2.new(0, 0, 2, 0)
 slotPanel.Parent = frame
 
-local editPanel = Instance.new("Frame") -- Column 2 (Middle)
-editPanel.Size = UDim2.new(0, 320, 0, 275)
+local editPanel = Instance.new("Frame")
+editPanel.Size = UDim2.new(0, 320, 0, 305)
 editPanel.Position = UDim2.new(0, 200, 0, 35)
 editPanel.BackgroundTransparency = 1
 editPanel.Parent = frame
 
-local presetPanel = Instance.new("ScrollingFrame") -- Column 3 (Right)
-presetPanel.Size = UDim2.new(0, 180, 0, 235)
+local presetPanel = Instance.new("ScrollingFrame")
+presetPanel.Size = UDim2.new(0, 180, 0, 265)
 presetPanel.Position = UDim2.new(0, 530, 0, 35)
 presetPanel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 presetPanel.CanvasSize = UDim2.new(0, 0, 2, 0)
@@ -227,7 +296,62 @@ presetPanel.Parent = frame
 
 local updateSlotUI, updateEditUI, updatePresetUI
 
--- Input Matrix Config (Keeps Values on Click)
+-- Sub-Part Selector UI Dropdown Container Elements
+local partSelectBtn = Instance.new("TextButton")
+partSelectBtn.Size = UDim2.new(0, 315, 0, 26)
+partSelectBtn.Position = UDim2.new(0, 0, 0, 38)
+partSelectBtn.BackgroundColor3 = Color3.fromRGB(45, 55, 45)
+partSelectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+partSelectBtn.Text = "Editing Component: Handle"
+partSelectBtn.Font = Enum.Font.SourceSansBold
+partSelectBtn.TextSize = 13
+partSelectBtn.Parent = editPanel
+
+local partDropdownScroll = Instance.new("ScrollingFrame")
+partDropdownScroll.Size = UDim2.new(0, 315, 0, 120)
+partDropdownScroll.Position = UDim2.new(0, 0, 0, 64)
+partDropdownScroll.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+partDropdownScroll.BorderSizePixel = 1
+partDropdownScroll.ZIndex = 5
+partDropdownScroll.Visible = false
+partDropdownScroll.Parent = editPanel
+
+partSelectBtn.MouseButton1Click:Connect(function()
+	partDropdownScroll.Visible = not partDropdownScroll.Visible
+end)
+
+local function updateSubPartDropdown()
+	partDropdownScroll:ClearAllChildren()
+	local dLayout = Instance.new("UIListLayout")
+	dLayout.Parent = partDropdownScroll
+	
+	local activeData = accessoryList[selectedIndex]
+	if not activeData then return end
+	
+	partSelectBtn.Text = "Editing Component: " .. selectedSubPartName
+	
+	for pName, _ in pairs(activeData.partsData) do
+		local row = Instance.new("TextButton")
+		row.Size = UDim2.new(1, 0, 0, 24)
+		row.BackgroundColor3 = (pName == selectedSubPartName) and Color3.fromRGB(0, 120, 60) or Color3.fromRGB(30, 30, 30)
+		row.TextColor3 = Color3.fromRGB(255, 255, 255)
+		row.Text = pName
+		row.TextSize = 12
+		row.ZIndex = 6
+		row.Parent = partDropdownScroll
+		
+		row.MouseButton1Click:Connect(function()
+			selectedSubPartName = pName
+			partDropdownScroll.Visible = false
+			updateSubPartDropdown()
+			updateEditUI()
+			highlightSelectedSubPart() -- Immediately refresh color wire bounding box
+		end)
+	end
+	partDropdownScroll.CanvasSize = UDim2.new(0, 0, 0, #partDropdownScroll:GetChildren() * 24)
+end
+
+-- Input Matrix Config mapped to Nested Properties
 local inputs = {}
 local function createEditInput(labelName, property, x, y)
 	local label = Instance.new("TextLabel")
@@ -251,28 +375,28 @@ local function createEditInput(labelName, property, x, y)
 
 	box.FocusLost:Connect(function()
 		local data = accessoryList[selectedIndex]
-		if data then
-			data[property] = tonumber(box.Text) or data[property]
-			box.Text = tostring(data[property])
+		if data and data.partsData[selectedSubPartName] then
+			data.partsData[selectedSubPartName][property] = tonumber(box.Text) or data.partsData[selectedSubPartName][property]
+			box.Text = tostring(data.partsData[selectedSubPartName][property])
 		end
 	end)
 	inputs[property] = box
 end
 
--- Build Column 2 Increments
-createEditInput("Offset X:", "offsetX", 0, 45)
-createEditInput("Offset Y:", "offsetY", 0, 75)
-createEditInput("Offset Z:", "offsetZ", 0, 105)
+-- Build Column 2 Inputs 
+createEditInput("Offset X:", "offsetX", 0, 75)
+createEditInput("Offset Y:", "offsetY", 0, 105)
+createEditInput("Offset Z:", "offsetZ", 0, 135)
 
-createEditInput("Rotate X:", "rotateX", 165, 45)
-createEditInput("Rotate Y:", "rotateY", 165, 75)
-createEditInput("Rotate Z:", "rotateZ", 165, 105)
+createEditInput("Rotate X:", "rotateX", 165, 75)
+createEditInput("Rotate Y:", "rotateY", 165, 105)
+createEditInput("Rotate Z:", "rotateZ", 165, 135)
 
-createEditInput("Scale X:", "scaleX", 0, 140)
-createEditInput("Scale Y:", "scaleY", 0, 170)
-createEditInput("Scale Z:", "scaleZ", 0, 200)
+createEditInput("Scale X:", "scaleX", 0, 170)
+createEditInput("Scale Y:", "scaleY", 0, 200)
+createEditInput("Scale Z:", "scaleZ", 0, 230)
 
--- ID Config Link
+-- ID Configuration Link
 local idLabel = Instance.new("TextLabel")
 idLabel.Size = UDim2.new(0, 60, 0, 25)
 idLabel.Position = UDim2.new(0, 0, 0, 5)
@@ -304,7 +428,7 @@ for idx, limbName in ipairs(targets) do
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(0, 72, 0, 24)
 	local xPos = (idx % 2 == 1) and 165 or 242
-	local yPos = (idx <= 2) and 140 or 170
+	local yPos = (idx <= 2) and 170 or 200
 	
 	btn.Position = UDim2.new(0, xPos, 0, yPos)
 	btn.Font = Enum.Font.SourceSansBold
@@ -325,7 +449,7 @@ end
 -- Refresh Action Trigger
 local applyBtn = Instance.new("TextButton")
 applyBtn.Size = UDim2.new(0, 150, 0, 32)
-applyBtn.Position = UDim2.new(0, 165, 0, 205)
+applyBtn.Position = UDim2.new(0, 165, 0, 232)
 applyBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
 applyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 applyBtn.Text = "APPLY ALL"
@@ -337,7 +461,7 @@ applyBtn.MouseButton1Click:Connect(applyAllAccessories)
 -- Mobile-Friendly Part Explosion / Inspector Button
 local inspectBtn = Instance.new("TextButton")
 inspectBtn.Size = UDim2.new(0, 315, 0, 32)
-inspectBtn.Position = UDim2.new(0, 0, 0, 242)
+inspectBtn.Position = UDim2.new(0, 0, 0, 270)
 inspectBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
 inspectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 inspectBtn.Text = "INSPECT INDIVIDUAL PARTS"
@@ -359,14 +483,13 @@ local function togglePartExplosion()
 	local character = player.Character
 	if not character then return end
 
-	for _, tween in ipairs(activeTweens) do
-		tween:Cancel()
-	end
+	for _, tween in ipairs(activeTweens) do tween:Cancel() end
 	table.clear(activeTweens)
 
 	isExploded = not isExploded
 
 	if isExploded then
+		clearActiveHighlight() -- Turn off standard highlighter overlays during explosive mode viewports
 		inspectBtn.Text = "COMBINE CUSTOM MODELS"
 		inspectBtn.BackgroundColor3 = Color3.fromRGB(150, 35, 35)
 		inspectBtnStroke.Color = Color3.fromRGB(255, 100, 100)
@@ -431,7 +554,6 @@ local function togglePartExplosion()
 					if part and part.Parent then
 						local innerWeld = part:FindFirstChild("ModelInnerWeld") or part:FindFirstChild("AccessoryWeld")
 						if innerWeld then innerWeld.Enabled = true end
-						
 						task.wait()
 						part.Anchored = originalAnchoredStates[part] or false
 					end
@@ -439,18 +561,30 @@ local function togglePartExplosion()
 				tween:Play()
 			end
 		end
+		task.wait(0.35)
+		highlightSelectedSubPart() -- Restore structural tracking colors
 	end
 end
 
 inspectBtn.MouseButton1Click:Connect(togglePartExplosion)
 
--- Grid Display Calculations (Middle Column Redraw)
+-- Configuration Vector Redraws
 updateEditUI = function()
 	local data = accessoryList[selectedIndex]
 	if not data then return end
+	
 	idBox.Text = tostring(data.id)
+	
+	if not data.partsData[selectedSubPartName] then
+		selectedSubPartName = "Handle"
+		if not data.partsData["Handle"] then
+			data.partsData["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
+		end
+	end
+	
+	local pData = data.partsData[selectedSubPartName]
 	for prop, box in pairs(inputs) do
-		box.Text = tostring(data[prop])
+		box.Text = tostring(pData[prop] or 0)
 	end
 	
 	for limbName, btn in pairs(targetButtons) do
@@ -462,9 +596,10 @@ updateEditUI = function()
 			btn.Text = limbName
 		end
 	end
+	updateSubPartDropdown()
 end
 
--- Slot List Redraw (Left Column)
+-- Slot List Redraw
 updateSlotUI = function()
 	slotPanel:ClearAllChildren()
 	local layout = Instance.new("UIListLayout")
@@ -489,8 +624,10 @@ updateSlotUI = function()
 		
 		selBtn.MouseButton1Click:Connect(function()
 			selectedIndex = i
+			selectedSubPartName = "Handle"
 			updateSlotUI()
 			updateEditUI()
+			highlightSelectedSubPart()
 		end)
 		
 		local delBtn = Instance.new("TextButton")
@@ -506,8 +643,10 @@ updateSlotUI = function()
 			if #accessoryList > 1 then
 				table.remove(accessoryList, i)
 				if selectedIndex > #accessoryList then selectedIndex = #accessoryList end
+				selectedSubPartName = "Handle"
 				updateSlotUI()
 				updateEditUI()
+				highlightSelectedSubPart()
 			end
 		end)
 	end
@@ -520,17 +659,23 @@ updateSlotUI = function()
 	addBtn.Font = Enum.Font.SourceSansBold
 	addBtn.Parent = slotPanel
 	addBtn.MouseButton1Click:Connect(function()
-		table.insert(accessoryList, {id = 17121838966, targetPart = "Head", offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1})
+		table.insert(accessoryList, {
+			id = 17121838966, 
+			targetPart = "Head", 
+			partsData = { ["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1} }
+		})
 		selectedIndex = #accessoryList
+		selectedSubPartName = "Handle"
 		updateSlotUI()
 		updateEditUI()
+		highlightSelectedSubPart()
 	end)
 end
 
--- Preset Save Architecture (Right Column Panel)
+-- Preset File Processing Panel Architecture
 local savePanel = Instance.new("Frame")
 savePanel.Size = UDim2.new(0, 180, 0, 35)
-savePanel.Position = UDim2.new(0, 530, 0, 275)
+savePanel.Position = UDim2.new(0, 530, 0, 305)
 savePanel.BackgroundTransparency = 1
 savePanel.Parent = frame
 
@@ -607,6 +752,7 @@ updatePresetUI = function()
 					if tableSuccess and type(decoded) == "table" then
 						accessoryList = decoded
 						selectedIndex = 1
+						selectedSubPartName = "Handle"
 						updateSlotUI()
 						updateEditUI()
 						applyAllAccessories()
