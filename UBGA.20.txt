@@ -1,5 +1,5 @@
--- Upper Body Mesh Customizer (Draggable Toggle Edition)
--- Auto-Execute Compatible with Multi-Slot & Preset Saves
+-- Upper Body Mesh & Model Customizer (R6 Wide Layout Edition)
+-- Auto-Execute Compatible with Multi-Slot, Preset Saves & Raw Models
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -48,7 +48,12 @@ local function applyAllAccessories()
 			end)
 			
 			if success and assetModel then
+				-- Dynamic Handle Selection for Accessories vs Raw Models
 				local handle = assetModel:FindFirstChild("Handle") or assetModel:FindFirstChildWhichIsA("Part", true) or assetModel:FindFirstChildWhichIsA("MeshPart", true)
+				if not handle and assetModel:IsA("Model") and assetModel.PrimaryPart then
+					handle = assetModel.PrimaryPart
+				end
+				
 				if handle then
 					handle.Anchored = false
 					for _, obj in ipairs(assetModel:GetDescendants()) do
@@ -73,7 +78,27 @@ local function applyAllAccessories()
 					
 					local accessory = Instance.new("Accessory")
 					accessory.Name = "CustomBody_" .. tostring(index)
-					handle.Parent = accessory
+					
+					-- Weld structure management for multi-part models
+					if assetModel:IsA("Model") then
+						for _, obj in ipairs(assetModel:GetDescendants()) do
+							if obj:IsA("BasePart") and obj ~= handle then
+								local innerWeld = Instance.new("WeldConstraint")
+								innerWeld.Name = "ModelInnerWeld"
+								innerWeld.Part0 = obj
+								innerWeld.Part1 = handle
+								innerWeld.Parent = obj
+							end
+						end
+						for _, obj in ipairs(assetModel:GetChildren()) do
+							if obj:IsA("BasePart") or obj:IsA("Folder") or obj:IsA("Configuration") then
+								obj.Parent = accessory
+							end
+						end
+						assetModel:Destroy()
+					else
+						handle.Parent = accessory
+					end
 					
 					local weld = Instance.new("Weld")
 					weld.Name = "AccessoryWeld"
@@ -118,7 +143,7 @@ frame.BorderSizePixel = 2
 frame.Visible = true
 frame.Parent = sgui
 
--- Seamless Dragging Engine Core
+-- Draggable Engine Core
 local dragging, dragInput, dragStart, startPos
 local function updateDrag(input)
 	local delta = input.Position - dragStart
@@ -151,9 +176,16 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
-toggleBtn.MouseButton1Click:Connect(function() 
-	frame.Visible = not frame.Visible 
-end)
+toggleBtn.MouseButton1Click:Connect(function() frame.Visible = not frame.Visible end)
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+title.TextColor3 = Color3.fromRGB(255, 255, 255)
+title.Text = "Upper Body Mesh & Model Customizer (Head / Torso / Shoulders)"
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 15
+title.Parent = frame
 
 -- Panels Division
 local slotPanel = Instance.new("ScrollingFrame") -- Column 1 (Left)
