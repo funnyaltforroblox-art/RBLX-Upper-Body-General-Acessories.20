@@ -387,11 +387,21 @@ slotPanel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 slotPanel.CanvasSize = UDim2.new(0, 0, 2, 0)
 slotPanel.Parent = frame
 
-local editPanel = Instance.new("Frame")
-editPanel.Size = UDim2.new(0, 320, 0, 305)
-editPanel.Position = UDim2.new(0, 200, 0, 35)
+-- Middle Panel Base Wrapper
+local editPanelWrapper = Instance.new("Frame")
+editPanelWrapper.Size = UDim2.new(0, 320, 0, 305)
+editPanelWrapper.Position = UDim2.new(0, 200, 0, 35)
+editPanelWrapper.BackgroundTransparency = 1
+editPanelWrapper.Parent = frame
+
+-- converted into a ScrollingFrame to let modules scroll smoothly
+local editPanel = Instance.new("ScrollingFrame")
+editPanel.Size = UDim2.new(1, 0, 0, 260)
+editPanel.Position = UDim2.new(0, 0, 0, 0)
 editPanel.BackgroundTransparency = 1
-editPanel.Parent = frame
+editPanel.CanvasSize = UDim2.new(0, 0, 0, 320)
+editPanel.ScrollBarThickness = 4
+editPanel.Parent = editPanelWrapper
 
 local presetPanel = Instance.new("ScrollingFrame")
 presetPanel.Size = UDim2.new(0, 180, 0, 265)
@@ -403,7 +413,7 @@ presetPanel.Parent = frame
 local updateSlotUI, updateEditUI, updatePresetUI
 
 local partSelectBtn = Instance.new("TextButton")
-partSelectBtn.Size = UDim2.new(0, 315, 0, 26)
+partSelectBtn.Size = UDim2.new(0, 305, 0, 26)
 partSelectBtn.Position = UDim2.new(0, 0, 0, 38)
 partSelectBtn.BackgroundColor3 = Color3.fromRGB(45, 55, 45)
 partSelectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -413,7 +423,7 @@ partSelectBtn.TextSize = 13
 partSelectBtn.Parent = editPanel
 
 local partDropdownScroll = Instance.new("ScrollingFrame")
-partDropdownScroll.Size = UDim2.new(0, 315, 0, 120)
+partDropdownScroll.Size = UDim2.new(0, 305, 0, 120)
 partDropdownScroll.Position = UDim2.new(0, 0, 0, 64)
 partDropdownScroll.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 partDropdownScroll.BorderSizePixel = 1
@@ -473,8 +483,8 @@ local function createEditInput(labelName, property, x, y)
 	label.Parent = editPanel
 
 	local box = Instance.new("TextBox")
-	box.Size = UDim2.new(0, 65, 0, 22)
-	box.Position = UDim2.new(0, x + 80, 0, y)
+	box.Size = UDim2.new(0, 60, 0, 22)
+	box.Position = UDim2.new(0, x + 75, 0, y)
 	box.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 	box.TextColor3 = Color3.fromRGB(255, 255, 255)
 	box.ClearTextOnFocus = false
@@ -498,9 +508,9 @@ createEditInput("Offset X:", "offsetX", 0, 75)
 createEditInput("Offset Y:", "offsetY", 0, 105)
 createEditInput("Offset Z:", "offsetZ", 0, 135)
 
-createEditInput("Rotate X:", "rotateX", 165, 75)
-createEditInput("Rotate Y:", "rotateY", 165, 105)
-createEditInput("Rotate Z:", "rotateZ", 165, 135)
+createEditInput("Rotate X:", "rotateX", 155, 75)
+createEditInput("Rotate Y:", "rotateY", 155, 105)
+createEditInput("Rotate Z:", "rotateZ", 155, 135)
 
 createEditInput("Scale X:", "scaleX", 0, 170)
 createEditInput("Scale Y:", "scaleY", 0, 200)
@@ -517,7 +527,7 @@ idLabel.TextXAlignment = Enum.TextXAlignment.Left
 idLabel.Parent = editPanel
 
 local idBox = Instance.new("TextBox")
-idBox.Size = UDim2.new(0, 250, 0, 25)
+idBox.Size = UDim2.new(0, 240, 0, 25)
 idBox.Position = UDim2.new(0, 65, 0, 5)
 idBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 idBox.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -542,7 +552,7 @@ local targetButtons = {}
 for idx, limbName in ipairs(targets) do
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(0, 72, 0, 24)
-	local xPos = (idx % 2 == 1) and 165 or 242
+	local xPos = (idx % 2 == 1) and 155 or 232
 	local yPos = (idx <= 2) and 170 or 200
 	
 	btn.Position = UDim2.new(0, xPos, 0, yPos)
@@ -561,10 +571,9 @@ for idx, limbName in ipairs(targets) do
 	targetButtons[limbName] = btn
 end
 
--- Fixed Layout: Shifted the FP Toggle up slightly to clear the execution button matrix row
 local fpToggleBtn = Instance.new("TextButton")
 fpToggleBtn.Size = UDim2.new(0, 149, 0, 24)
-fpToggleBtn.Position = UDim2.new(0, 165, 0, 232)
+fpToggleBtn.Position = UDim2.new(0, 155, 0, 232)
 fpToggleBtn.Font = Enum.Font.SourceSansBold
 fpToggleBtn.TextSize = 11
 fpToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -580,9 +589,8 @@ fpToggleBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
--- Layout Fix: Placed "APPLY ALL" and "INSPECT" on the exact bottom row split to avoid overlaying fields
 local applyBtn = Instance.new("TextButton")
-applyBtn.Size = UDim2.new(0, 150, 0, 32)
+applyBtn.Size = UDim2.new(0, 145, 0, 32)
 applyBtn.Position = UDim2.new(0, 0, 0, 270)
 applyBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
 applyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -592,15 +600,16 @@ applyBtn.TextSize = 14
 applyBtn.Parent = editPanel
 applyBtn.MouseButton1Click:Connect(applyAllAccessories)
 
+-- Static Explode Button Strategy: Anchored outside scroll engine frame to absolute split bottom row
 local inspectBtn = Instance.new("TextButton")
-inspectBtn.Size = UDim2.new(0, 155, 0, 32)
-inspectBtn.Position = UDim2.new(0, 160, 0, 270)
+inspectBtn.Size = UDim2.new(0, 315, 0, 32)
+inspectBtn.Position = UDim2.new(0, 0, 0, 270)
 inspectBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
 inspectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-inspectBtn.Text = "INSPECT PARTS"
+inspectBtn.Text = "INSPECT INDIVIDUAL PARTS"
 inspectBtn.Font = Enum.Font.SourceSansBold
-inspectBtn.TextSize = 12
-inspectBtn.Parent = editPanel
+inspectBtn.TextSize = 13
+inspectBtn.Parent = editPanelWrapper
 
 local inspectBtnStroke = Instance.new("UIStroke")
 inspectBtnStroke.Color = Color3.fromRGB(0, 150, 255)
@@ -622,7 +631,7 @@ local function togglePartExplosion()
 
 	if isExploded then
 		clearActiveHighlight()
-		inspectBtn.Text = "COMBINE MODELS"
+		inspectBtn.Text = "COMBINE CUSTOM MODELS"
 		inspectBtn.BackgroundColor3 = Color3.fromRGB(150, 35, 35)
 		inspectBtnStroke.Color = Color3.fromRGB(255, 100, 100)
 
@@ -673,7 +682,7 @@ local function togglePartExplosion()
 			end
 		end
 	else
-		inspectBtn.Text = "INSPECT PARTS"
+		inspectBtn.Text = "INSPECT INDIVIDUAL PARTS"
 		inspectBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
 		inspectBtnStroke.Color = Color3.fromRGB(0, 150, 255)
 
