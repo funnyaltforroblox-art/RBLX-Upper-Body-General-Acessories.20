@@ -11,7 +11,13 @@ local selIdx = 1
 
 local function clearPhys()
 	local c = pl.Character
-	if c then for _, v in ipairs(c:GetChildren()) do if v:IsA("Accessory") and string.sub(v.Name, 1, 11) == "CustomBody_" then v:Destroy() end end end
+	if c then 
+		for _, v in ipairs(c:GetChildren()) do 
+			if v:IsA("Accessory") and string.sub(v.Name, 1, 11) == "CustomBody_" then 
+				v:Destroy() 
+			end 
+		end 
+	end
 end
 
 local function applyAll()
@@ -50,8 +56,8 @@ local function applyAll()
 end
 
 local sg = Instance.new("ScreenGui", pl.PlayerGui) sg.Name, sg.ResetOnSpawn = "UpperBodyMasterGUI", false
-local tBtn = Instance.new("TextButton", sg) tBtn.Size, tBtn.Position, tBtn.BackgroundColor3, tBtn.TextColor3, tBtn.Text, tBtn.Font, tBtn.TextSize = UDim2.new(0, 100, 0, 35), UDim2.new(0, 10, 0, 10), Color3.fromRGB(30,30,30), Color3.fromRGB(255,255,255), "Toggle Menu", 2, 16
-local fr = Instance.new("Frame", sg) fr.Size, fr.Position, fr.BackgroundColor3, fr.BorderSizePixel = UDim2.new(0, 720, 0, 320), UDim2.new(0.5, -360, 0.5, -160), Color3.fromRGB(20,20,20), 2
+local tBtn = Instance.new("TextButton", sg) tBtn.Size, tBtn.Position, tBtn.BackgroundColor3, tBtn.TextColor3, tBtn.Text, tBtn.Font, tBtn.TextSize = UDim2.new(0, 100, 0, 35), UDim2.new(0, 10, 0, 10), Color3.fromRGB(30, 30, 30), Color3.fromRGB(255, 255, 255), "Toggle Menu", 2, 16
+local fr = Instance.new("Frame", sg) fr.Size, fr.Position, fr.BackgroundColor3, fr.BorderSizePixel = UDim2.new(0, 720, 0, 320), UDim2.new(0.5, -360, 0.5, -160), Color3.fromRGB(20, 20, 20), 2
 
 local drag, dInp, dStart, sPos
 tBtn.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then drag, dStart, sPos = true, i.Position, tBtn.Position i.Changed:Connect(function() if i.UserInputState == Enum.UserInputState.End then drag = false end end) end end)
@@ -59,35 +65,40 @@ tBtn.InputChanged:Connect(function(i) if i.UserInputType == Enum.UserInputType.M
 U.InputChanged:Connect(function(i) if i == dInp and drag then local d = i.Position - dStart tBtn.Position = UDim2.new(sPos.X.Scale, sPos.X.Offset + d.X, sPos.Y.Scale, sPos.Y.Offset + d.Y) end end)
 tBtn.MouseButton1Click:Connect(function() fr.Visible = not fr.Visible end)
 
-local tl = Instance.new("TextLabel", fr) tl.Size, tl.BackgroundColor3, tl.TextColor3, tl.Text, tl.Font, tl.TextSize = UDim2.new(1, 0, 0, 30), Color3.fromRGB(35,35,35), Color3.fromRGB(255,255,255), "Upper Body Mesh & Model Customizer", 2, 15
-local sPan = Instance.new("ScrollingFrame", fr) sPan.Size, sPan.Position, sPan.BackgroundColor3, sPan.CanvasSize = UDim2.new(0, 180, 0, 275), UDim2.new(0, 10, 0, 35), Color3.fromRGB(25,25,25), UDim2.new(0,0,2,0)
+local tl = Instance.new("TextLabel", fr) tl.Size, tl.BackgroundColor3, tl.TextColor3, tl.Text, tl.Font, tl.TextSize = UDim2.new(1, 0, 0, 30), Color3.fromRGB(35, 35, 35), Color3.fromRGB(255, 255, 255), "Upper Body Mesh & Model Customizer", 2, 15
+local sPan = Instance.new("ScrollingFrame", fr) sPan.Size, sPan.Position, sPan.BackgroundColor3, sPan.CanvasSize = UDim2.new(0, 180, 0, 275), UDim2.new(0, 10, 0, 35), Color3.fromRGB(25, 25, 25), UDim2.new(0, 0, 2, 0)
 local ePan = Instance.new("Frame", fr) ePan.Size, ePan.Position, ePan.BackgroundTransparency = UDim2.new(0, 320, 0, 275), UDim2.new(0, 200, 0, 35), 1
-local pPan = Instance.new("ScrollingFrame", fr) pPan.Size, pPan.Position, pPan.BackgroundColor3, pPan.CanvasSize = UDim2.new(0, 180, 0, 235), UDim2.new(0, 530, 0, 35), Color3.fromRGB(25,25,25), UDim2.new(0,0,2,0)
+local pPan = Instance.new("ScrollingFrame", fr) pPan.Size, pPan.Position, pPan.BackgroundColor3, pPan.CanvasSize = UDim2.new(0, 180, 0, 235), UDim2.new(0, 530, 0, 35), Color3.fromRGB(25, 25, 25), UDim2.new(0, 0, 2, 0)
 
 local upSlot, upEdit, upPres
 local inps = {}
 local function cInp(lName, prop, x, y)
-	local l = Instance.new("TextLabel", ePan) l.Size, l.Position, l.BackgroundTransparency, l.TextColor3, l.Text, l.TextSize, l.TextXAlignment = UDim2.new(0, 75, 0, 22), UDim2.new(0, x, 0, y), 1, Color3.fromRGB(200,200,200), lName, 13, 0
-	local b = Instance.new("TextBox", ePan) b.Size, b.Position, b.BackgroundColor3, b.TextColor3, b.ClearTextOnFocus, b.TextSize = UDim2.new(0, 65, 0, 22), UDim2.new(0, x + 80, 0, y), Color3.fromRGB(45,45,45), Color3.fromRGB(255,255,255), false, 13
-	b.FocusLost:Connect(function() if accs[selIdx] then accs[selIdx][prop] = tonumber(b.Text) or accs[selIdx][prop] b.Text = tostring(accs[selIdx][prop]) end end)
+	local l = Instance.new("TextLabel", ePan) l.Size, l.Position, l.BackgroundTransparency, l.TextColor3, l.Text, l.TextSize, l.TextXAlignment = UDim2.new(0, 75, 0, 22), UDim2.new(0, x, 0, y), 1, Color3.fromRGB(200, 200, 200), lName, 13, 0
+	local b = Instance.new("TextBox", ePan) b.Size, b.Position, b.BackgroundColor3, b.TextColor3, b.ClearTextOnFocus, b.TextSize = UDim2.new(0, 65, 0, 22), UDim2.new(0, x + 80, 0, y), Color3.fromRGB(45, 45, 45), Color3.fromRGB(255, 255, 255), false, 13
+	b.FocusLost:Connect(function() 
+		if accs[selIdx] then 
+			accs[selIdx][prop] = tonumber(b.Text) or accs[selIdx][prop] 
+			b.Text = tostring(accs[selIdx][prop]) 
+		end 
+	end)
 	inps[prop] = b
 end
 
 local fields = {{"Offset X:", "offsetX", 0, 45}, {"Offset Y:", "offsetY", 0, 75}, {"Offset Z:", "offsetZ", 0, 105}, {"Rotate X:", "rotateX", 165, 45}, {"Rotate Y:", "rotateY", 165, 75}, {"Rotate Z:", "rotateZ", 165, 105}, {"Scale X:", "scaleX", 0, 140}, {"Scale Y:", "scaleY", 0, 170}, {"Scale Z:", "scaleZ", 0, 200}}
 for _, f in ipairs(fields) do cInp(f[1], f[2], f[3], f[4]) end
 
-local idL = Instance.new("TextLabel", ePan) idL.Size, idL.Position, idL.BackgroundTransparency, idL.TextColor3, idL.Text, idL.Font, idL.TextXAlignment = UDim2.new(0, 60, 0, 25), UDim2.new(0, 0, 0, 5), 1, Color3.fromRGB(255,255,255), "Asset ID:", 2, 0
-local idB = Instance.new("TextBox", ePan) idB.Size, idB.Position, idB.BackgroundColor3, idB.TextColor3, idB.ClearTextOnFocus = UDim2.new(0, 250, 0, 25), UDim2.new(0, 65, 0, 5), Color3.fromRGB(45,45,45), Color3.fromRGB(255,255,255), false
+local idL = Instance.new("TextLabel", ePan) idL.Size, idL.Position, idL.BackgroundTransparency, idL.TextColor3, idL.Text, idL.Font, idL.TextXAlignment = UDim2.new(0, 60, 0, 25), UDim2.new(0, 0, 0, 5), 1, Color3.fromRGB(255, 255, 255), "Asset ID:", 2, 0
+local idB = Instance.new("TextBox", ePan) idB.Size, idB.Position, idB.BackgroundColor3, idB.TextColor3, idB.ClearTextOnFocus = UDim2.new(0, 250, 0, 25), UDim2.new(0, 65, 0, 5), Color3.fromRGB(45, 45, 45), Color3.fromRGB(255, 255, 255), false
 idB.FocusLost:Connect(function() if accs[selIdx] then accs[selIdx].id = tonumber(idB.Text) or accs[selIdx].id end end)
 
 local targets, tBtns = {"Head", "Torso", "Left Arm", "Right Arm"}, {}
 for idx, name in ipairs(targets) do
-	local btn = Instance.new("TextButton", ePan) btn.Size, btn.Position, btn.Font, btn.TextSize, btn.TextColor3, btn.Text = UDim2.new(0, 72, 0, 24), UDim2.new(0, (idx % 2 == 1) and 165 or 242, 0, (idx <= 2) and 140 or 170), 2, 11, Color3.fromRGB(255,255,255), name
+	local btn = Instance.new("TextButton", ePan) btn.Size, btn.Position, btn.Font, btn.TextSize, btn.TextColor3, btn.Text = UDim2.new(0, 72, 0, 24), UDim2.new(0, (idx % 2 == 1) and 165 or 242, 0, (idx <= 2) and 140 or 170), 2, 11, Color3.fromRGB(255, 255, 255), name
 	btn.MouseButton1Click:Connect(function() if accs[selIdx] then accs[selIdx].targetPart = name upEdit() end end)
 	tBtns[name] = btn
 end
 
-local appBtn = Instance.new("TextButton", ePan) appBtn.Size, appBtn.Position, appBtn.BackgroundColor3, appBtn.TextColor3, appBtn.Text, appBtn.Font, appBtn.TextSize = UDim2.new(0, 150, 0, 32), UDim2.new(0, 165, 0, 205), Color3.fromRGB(0, 100, 200), Color3.fromRGB(255,255,255), "APPLY ALL", 2, 14
+local appBtn = Instance.new("TextButton", ePan) appBtn.Size, appBtn.Position, appBtn.BackgroundColor3, appBtn.TextColor3, appBtn.Text, appBtn.Font, appBtn.TextSize = UDim2.new(0, 150, 0, 32), UDim2.new(0, 165, 0, 205), Color3.fromRGB(0, 100, 200), Color3.fromRGB(255, 255, 255), "APPLY ALL", 2, 14
 appBtn.MouseButton1Click:Connect(applyAll)
 
 upEdit = function()
@@ -105,12 +116,12 @@ upSlot = function()
 	local l = Instance.new("UIListLayout", sPan) l.Padding = UDim.new(0, 4)
 	for i, d in ipairs(accs) do
 		local f = Instance.new("Frame", sPan) f.Size, f.BackgroundTransparency = UDim2.new(1, 0, 0, 30), 1
-		local s = Instance.new("TextButton", f) s.Size, s.BackgroundColor3, s.TextColor3, s.Text, s.TextSize = UDim2.new(0, 120, 1, 0), (i == selIdx) and Color3.fromRGB(0, 90, 160) or Color3.fromRGB(40, 40, 40), Color3.fromRGB(255,255,255), "Slot " .. i .. " (" .. ((d.targetPart == "Left Arm") and "LA" or (d.targetPart == "Right Arm") and "RA" or string.sub(d.targetPart, 1, 4)) .. ")", 13
+		local s = Instance.new("TextButton", f) s.Size, s.BackgroundColor3, s.TextColor3, s.Text, s.TextSize = UDim2.new(0, 120, 1, 0), (i == selIdx) and Color3.fromRGB(0, 90, 160) or Color3.fromRGB(40, 40, 40), Color3.fromRGB(255, 255, 255), "Slot " .. i .. " (" .. ((d.targetPart == "Left Arm") and "LA" or (d.targetPart == "Right Arm") and "RA" or string.sub(d.targetPart, 1, 4)) .. ")", 13
 		s.MouseButton1Click:Connect(function() selIdx = i upSlot() upEdit() end)
-		local del = Instance.new("TextButton", f) del.Size, del.Position, del.BackgroundColor3, del.TextColor3, del.Text, del.Font = UDim2.new(0, 45, 1, 0), UDim2.new(0, 125, 0, 0), Color3.fromRGB(130, 30, 30), Color3.fromRGB(255,255,255), "X", 2
+		local del = Instance.new("TextButton", f) del.Size, del.Position, del.BackgroundColor3, del.TextColor3, del.Text, del.Font = UDim2.new(0, 45, 1, 0), UDim2.new(0, 125, 0, 0), Color3.fromRGB(130, 30, 30), Color3.fromRGB(255, 255, 255), "X", 2
 		del.MouseButton1Click:Connect(function() if #accs > 1 then table.remove(accs, i) if selIdx > #accs then selIdx = #accs end upSlot() upEdit() end end)
 	end
-	local add = Instance.new("TextButton", sPan) add.Size, add.BackgroundColor3, add.TextColor3, add.Text, add.Font = UDim2.new(1, 0, 0, 30), Color3.fromRGB(45, 85, 45), Color3.fromRGB(255,255,255), "+ Add Accessory", 2
+	local add = Instance.new("TextButton", sPan) add.Size, add.BackgroundColor3, add.TextColor3, add.Text, add.Font = UDim2.new(1, 0, 0, 30), Color3.fromRGB(45, 85, 45), Color3.fromRGB(255, 255, 255), "+ Add Accessory", 2
 	add.MouseButton1Click:Connect(function() table.insert(accs, {id = 17121838966, targetPart = "Head", offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}) selIdx = #accs upSlot() upEdit() end)
 end
 
