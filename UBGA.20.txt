@@ -20,7 +20,7 @@ local accessoryList = {
 	{
 		id = 17121838966, 
 		targetPart = "Head", 
-		firstPersonVisible = false, -- New core persistent parameter
+		firstPersonVisible = false,
 		partsData = {
 			["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
 		}
@@ -260,7 +260,6 @@ local function applyAllAccessories()
 	task.defer(highlightSelectedSubPart)
 end
 
--- RenderStepped thread systematically forces first person rendering visibility
 RunService.RenderStepped:Connect(function()
 	local character = player.Character
 	if not character then return end
@@ -350,11 +349,10 @@ title.Font = Enum.Font.SourceSansBold
 title.TextSize = 15
 title.Parent = frame
 
--- Dynamic Corner Live Update Status Indicator (Red Dot)
 local statusDot = Instance.new("Frame")
 statusDot.Size = UDim2.new(0, 10, 0, 10)
 statusDot.Position = UDim2.new(1, -20, 0, 10)
-statusDot.BackgroundColor3 = Color3.fromRGB(255, 40, 40) -- Defaults to Red (Verification pending)
+statusDot.BackgroundColor3 = Color3.fromRGB(255, 40, 40)
 statusDot.BorderSizePixel = 0
 statusDot.Parent = title
 
@@ -376,7 +374,6 @@ statusTooltip.Parent = statusDot
 statusDot.MouseEnter:Connect(function() statusTooltip.Visible = true end)
 statusDot.MouseLeave:Connect(function() statusTooltip.Visible = false end)
 
--- Asynchronous version simulator tasks
 task.spawn(function()
 	task.wait(1.5)
 	TweenService:Create(statusDot, TweenInfo.new(0.5), {BackgroundColor3 = Color3.fromRGB(40, 220, 40)}):Play()
@@ -564,10 +561,10 @@ for idx, limbName in ipairs(targets) do
 	targetButtons[limbName] = btn
 end
 
--- Integrated First Person View Switcher Component
+-- Fixed Layout: Shifted the FP Toggle up slightly to clear the execution button matrix row
 local fpToggleBtn = Instance.new("TextButton")
 fpToggleBtn.Size = UDim2.new(0, 149, 0, 24)
-fpToggleBtn.Position = UDim2.new(0, 165, 0, 232) -- Stacked evenly below limb options grid
+fpToggleBtn.Position = UDim2.new(0, 165, 0, 232)
 fpToggleBtn.Font = Enum.Font.SourceSansBold
 fpToggleBtn.TextSize = 11
 fpToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -583,9 +580,10 @@ fpToggleBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
+-- Layout Fix: Placed "APPLY ALL" and "INSPECT" on the exact bottom row split to avoid overlaying fields
 local applyBtn = Instance.new("TextButton")
 applyBtn.Size = UDim2.new(0, 150, 0, 32)
-applyBtn.Position = UDim2.new(0, 0, 0, 232) -- Shifted left side to match the row
+applyBtn.Position = UDim2.new(0, 0, 0, 270)
 applyBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
 applyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 applyBtn.Text = "APPLY ALL"
@@ -595,13 +593,13 @@ applyBtn.Parent = editPanel
 applyBtn.MouseButton1Click:Connect(applyAllAccessories)
 
 local inspectBtn = Instance.new("TextButton")
-inspectBtn.Size = UDim2.new(0, 315, 0, 32)
-inspectBtn.Position = UDim2.new(0, 0, 0, 270)
+inspectBtn.Size = UDim2.new(0, 155, 0, 32)
+inspectBtn.Position = UDim2.new(0, 160, 0, 270)
 inspectBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
 inspectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-inspectBtn.Text = "INSPECT INDIVIDUAL PARTS"
+inspectBtn.Text = "INSPECT PARTS"
 inspectBtn.Font = Enum.Font.SourceSansBold
-inspectBtn.TextSize = 13
+inspectBtn.TextSize = 12
 inspectBtn.Parent = editPanel
 
 local inspectBtnStroke = Instance.new("UIStroke")
@@ -624,7 +622,7 @@ local function togglePartExplosion()
 
 	if isExploded then
 		clearActiveHighlight()
-		inspectBtn.Text = "COMBINE CUSTOM MODELS"
+		inspectBtn.Text = "COMBINE MODELS"
 		inspectBtn.BackgroundColor3 = Color3.fromRGB(150, 35, 35)
 		inspectBtnStroke.Color = Color3.fromRGB(255, 100, 100)
 
@@ -675,7 +673,7 @@ local function togglePartExplosion()
 			end
 		end
 	else
-		inspectBtn.Text = "INSPECT INDIVIDUAL PARTS"
+		inspectBtn.Text = "INSPECT PARTS"
 		inspectBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
 		inspectBtnStroke.Color = Color3.fromRGB(0, 150, 255)
 
@@ -927,4 +925,3 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-
