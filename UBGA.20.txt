@@ -1,5 +1,4 @@
--- Upper Body Mesh & Model Customizer (R6 Wide Layout - Individual Sub-Part Engine + Visual Highlight)
--- Auto-Execute Compatible with Multi-Slot, Nested Presets, & Physics Safeguards
+-- Upper Body Mesh & Model Customizer (R6 Wide Layout - Matrix Preservation Engine)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -9,7 +8,6 @@ local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 repeat task.wait() until player:FindFirstChild("PlayerGui")
 
--- File Configuration Setup & Environment Safeguards
 local FOLDER_NAME = "UpperBodyCustomizer_Presets"
 local HAS_FILESYSTEM = (makefolder ~= nil) and (writefile ~= nil) and (readfile ~= nil) and (listfiles ~= nil)
 
@@ -17,7 +15,6 @@ if HAS_FILESYSTEM then
 	pcall(function() makefolder(FOLDER_NAME) end)
 end
 
--- Global Core States (Nested Part Data Array Structure)
 local accessoryList = {
 	{
 		id = 17121838966, 
@@ -30,17 +27,13 @@ local accessoryList = {
 local selectedIndex = 1
 local selectedSubPartName = "Handle"
 
--- Part Inspector Core Tracking States
 local isExploded = false
 local originalPositions = {}
 local originalAnchoredStates = {} 
 local activeTweens = {}
 local EXPLODE_DISTANCE = 4.0 
-
--- Visual Highlight Tracking Pointer
 local currentHighlightBox = nil
 
--- Cleans up any existing target highlights safely
 local function clearActiveHighlight()
 	if currentHighlightBox then
 		currentHighlightBox:Destroy()
@@ -48,18 +41,15 @@ local function clearActiveHighlight()
 	end
 end
 
--- Locates the physical part instance by name inside the current slot's accessory structure
 local function findPhysicalPartInCharacter(slotIndex, partName)
 	local character = player.Character
 	if not character then return nil end
-	
 	local accessory = character:FindFirstChild("CustomBody_" .. tostring(slotIndex))
 	if not accessory then return nil end
 	
 	if partName == "Handle" then
 		return accessory:FindFirstChild("Handle")
 	else
-		-- Find subparts directly by exact name matching
 		for _, child in ipairs(accessory:GetDescendants()) do
 			if child:IsA("BasePart") and child.Name == partName then
 				return child
@@ -69,24 +59,20 @@ local function findPhysicalPartInCharacter(slotIndex, partName)
 	return nil
 end
 
--- Generates or moves a vibrant cyan bounding box onto the chosen active sub-component
 local function highlightSelectedSubPart()
 	clearActiveHighlight()
-	
 	local targetPartInstance = findPhysicalPartInCharacter(selectedIndex, selectedSubPartName)
 	if targetPartInstance and targetPartInstance:IsA("BasePart") then
 		local selectionBox = Instance.new("SelectionBox")
 		selectionBox.Name = "Customizer_PartHighlight"
-		selectionBox.Color3 = Color3.fromRGB(0, 255, 255) -- Pure Cyan
+		selectionBox.Color3 = Color3.fromRGB(0, 255, 255)
 		selectionBox.LineThickness = 0.04
 		selectionBox.Adornee = targetPartInstance
 		selectionBox.Parent = targetPartInstance
-		
 		currentHighlightBox = selectionBox
 	end
 end
 
--- Utility function to completely clean up physical objects
 local function clearPhysicalAccessories()
 	clearActiveHighlight()
 	local character = player.Character
@@ -102,7 +88,6 @@ local function clearPhysicalAccessories()
 	isExploded = false
 end
 
--- Render the physical objects onto the character model with Sub-Part transformations
 local function applyAllAccessories()
 	local character = player.Character
 	if not character then return end
@@ -128,15 +113,19 @@ local function applyAllAccessories()
 				if handle then
 					handle.Name = "Handle"
 					
-					-- Ensure every distinct component discovered inside gets its own isolated tracking row
+					-- CRITICAL FIX: Capture visual CFrame offset matrix *before* breaking spatial data
+					local structuralOffsets = {}
 					local partCounter = 1
+					
 					for _, obj in ipairs(assetModel:GetDescendants()) do
 						if obj:IsA("BasePart") and obj ~= handle then
-							-- Critical Fix: If parts share default names, force uniquely serialized internal naming keys
 							if obj.Name == "Part" or obj.Name == "MeshPart" or obj.Name == "" then
 								obj.Name = "Component_" .. tostring(partCounter)
 								partCounter = partCounter + 1
 							end
+							
+							-- Store exactly where this part sits relative to the model handle out of the box
+							structuralOffsets[obj.Name] = handle.CFrame:ToObjectSpace(obj.CFrame)
 							
 							if not data.partsData[obj.Name] then
 								data.partsData[obj.Name] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
@@ -144,7 +133,7 @@ local function applyAllAccessories()
 						end
 					end
 
-					-- Apply specific structural sizes explicitly per component footprint
+					-- Set scales safely
 					for _, obj in ipairs(assetModel:GetDescendants()) do
 						if obj:IsA("BasePart") then
 							obj.Anchored = false
@@ -175,9 +164,12 @@ local function applyAllAccessories()
 								innerWeld.Part0 = obj
 								innerWeld.Part1 = handle
 								
-								local posOffset = CFrame.new(pData.offsetX, pData.offsetY, pData.offsetZ)
-								local rotOffset = CFrame.Angles(math.rad(pData.rotateX), math.rad(pData.rotateY), math.rad(pData.rotateZ))
-								innerWeld.C0 = posOffset * rotOffset
+								-- Combines original 3D modeling position with your custom adjustments
+								local originalLocalCFrame = structuralOffsets[obj.Name] or CFrame.new()
+								local customPosOffset = CFrame.new(pData.offsetX, pData.offsetY, pData.offsetZ)
+								local customRotOffset = CFrame.Angles(math.rad(pData.rotateX), math.rad(pData.rotateY), math.rad(pData.rotateZ))
+								
+								innerWeld.C0 = originalLocalCFrame:Inverse() * (customPosOffset * customRotOffset)
 								innerWeld.Parent = obj
 							end
 						end
@@ -232,7 +224,6 @@ local mainBtnCorner = Instance.new("UICorner")
 mainBtnCorner.CornerRadius = UDim.new(0, 8)
 mainBtnCorner.Parent = toggleBtn
 
--- Wide Interface Container (720px for 3 Columns)
 local frame = Instance.new("Frame")
 frame.Size = UDim2.new(0, 720, 0, 350)
 frame.Position = UDim2.new(0.5, -360, 0.5, -175)
@@ -241,7 +232,6 @@ frame.BorderSizePixel = 2
 frame.Visible = true
 frame.Parent = sgui
 
--- Draggable Engine Core
 local dragging, dragInput, dragStart, startPos
 local function updateDrag(input)
 	local delta = input.Position - dragStart
@@ -280,12 +270,11 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Text = "Sub-Part Model Customizer Engine (With Active Component Highlighter)"
+title.Text = "Sub-Part Model Customizer Engine (Visual Grid Fix)"
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 15
 title.Parent = frame
 
--- Panels Division
 local slotPanel = Instance.new("ScrollingFrame")
 slotPanel.Size = UDim2.new(0, 180, 0, 305)
 slotPanel.Position = UDim2.new(0, 10, 0, 35)
@@ -308,7 +297,6 @@ presetPanel.Parent = frame
 
 local updateSlotUI, updateEditUI, updatePresetUI
 
--- Sub-Part Selector UI Dropdown Container Elements
 local partSelectBtn = Instance.new("TextButton")
 partSelectBtn.Size = UDim2.new(0, 315, 0, 26)
 partSelectBtn.Position = UDim2.new(0, 0, 0, 38)
@@ -342,7 +330,6 @@ local function updateSubPartDropdown()
 	
 	partSelectBtn.Text = "Editing Component: " .. selectedSubPartName
 	
-	-- Sort keys so Handle stays at the top safely
 	local sortedNames = {}
 	for name, _ in pairs(activeData.partsData) do table.insert(sortedNames, name) end
 	table.sort(sortedNames, function(a,b) if a == "Handle" then return true elseif b == "Handle" then return false else return a < b end end)
@@ -368,7 +355,6 @@ local function updateSubPartDropdown()
 	partDropdownScroll.CanvasSize = UDim2.new(0, 0, 0, #sortedNames * 24)
 end
 
--- Input Matrix Config mapped strictly to Selected Components
 local inputs = {}
 local function createEditInput(labelName, property, x, y)
 	local label = Instance.new("TextLabel")
@@ -390,7 +376,6 @@ local function createEditInput(labelName, property, x, y)
 	box.TextSize = 13
 	box.Parent = editPanel
 
-	-- Strict mathematical focus capture isolated explicitly to selected target name
 	box.FocusLost:Connect(function()
 		local data = accessoryList[selectedIndex]
 		if data and data.partsData[selectedSubPartName] then
@@ -404,7 +389,6 @@ local function createEditInput(labelName, property, x, y)
 	inputs[property] = box
 end
 
--- Build Column 2 Inputs 
 createEditInput("Offset X:", "offsetX", 0, 75)
 createEditInput("Offset Y:", "offsetY", 0, 105)
 createEditInput("Offset Z:", "offsetZ", 0, 135)
@@ -417,7 +401,6 @@ createEditInput("Scale X:", "scaleX", 0, 170)
 createEditInput("Scale Y:", "scaleY", 0, 200)
 createEditInput("Scale Z:", "scaleZ", 0, 230)
 
--- ID Configuration Link
 local idLabel = Instance.new("TextLabel")
 idLabel.Size = UDim2.new(0, 60, 0, 25)
 idLabel.Position = UDim2.new(0, 0, 0, 5)
@@ -441,7 +424,6 @@ idBox.FocusLost:Connect(function()
 	end
 end)
 
--- Multi-Limb Target Selection Panel
 local targets = {"Head", "Torso", "Left Arm", "Right Arm"}
 local targetButtons = {}
 
@@ -467,7 +449,6 @@ for idx, limbName in ipairs(targets) do
 	targetButtons[limbName] = btn
 end
 
--- Refresh Action Trigger
 local applyBtn = Instance.new("TextButton")
 applyBtn.Size = UDim2.new(0, 150, 0, 32)
 applyBtn.Position = UDim2.new(0, 165, 0, 232)
@@ -479,7 +460,6 @@ applyBtn.TextSize = 14
 applyBtn.Parent = editPanel
 applyBtn.MouseButton1Click:Connect(applyAllAccessories)
 
--- Mobile-Friendly Part Explosion / Inspector Button
 local inspectBtn = Instance.new("TextButton")
 inspectBtn.Size = UDim2.new(0, 315, 0, 32)
 inspectBtn.Position = UDim2.new(0, 0, 0, 270)
@@ -499,7 +479,6 @@ local inspectBtnCorner = Instance.new("UICorner")
 inspectBtnCorner.CornerRadius = UDim.new(0, 6)
 inspectBtnCorner.Parent = inspectBtn
 
--- Core Inspection Engine Logic
 local function togglePartExplosion()
 	local character = player.Character
 	if not character then return end
@@ -589,7 +568,6 @@ end
 
 inspectBtn.MouseButton1Click:Connect(togglePartExplosion)
 
--- Configuration Vector Redraws
 updateEditUI = function()
 	local data = accessoryList[selectedIndex]
 	if not data then return end
@@ -620,7 +598,6 @@ updateEditUI = function()
 	updateSubPartDropdown()
 end
 
--- Slot List Redraw
 updateSlotUI = function()
 	slotPanel:ClearAllChildren()
 	local layout = Instance.new("UIListLayout")
@@ -693,7 +670,6 @@ updateSlotUI = function()
 	end)
 end
 
--- Preset File Processing Panel Architecture
 local savePanel = Instance.new("Frame")
 savePanel.Size = UDim2.new(0, 180, 0, 35)
 savePanel.Position = UDim2.new(0, 530, 0, 305)
@@ -784,7 +760,6 @@ updatePresetUI = function()
 	end
 end
 
--- Initialize Engine Deployment Loops
 updateSlotUI()
 updateEditUI()
 updatePresetUI()
@@ -797,3 +772,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
+
