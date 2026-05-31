@@ -1,6 +1,5 @@
-lua
--- Upper Body Mesh & Model Customizer (R6 Wide Layout Edition + Physics Fixed Inspector)
--- Auto-Execute Compatible with Multi-Slot, Preset Saves & Raw Models
+-- Upper Body Mesh & Model Customizer (R6 Wide Layout Edition + Safe Architecture)
+-- Auto-Execute Compatible with Multi-Slot & Environment Safeguards
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -10,9 +9,13 @@ local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer
 repeat task.wait() until player:FindFirstChild("PlayerGui")
 
--- File Configuration Setup
+-- File Configuration Setup & Environment Safeguards
 local FOLDER_NAME = "UpperBodyCustomizer_Presets"
-if makefolder then pcall(function() makefolder(FOLDER_NAME) end) end
+local HAS_FILESYSTEM = (makefolder ~= nil) and (writefile ~= nil) and (readfile ~= nil) and (listfiles ~= nil)
+
+if HAS_FILESYSTEM then
+	pcall(function() makefolder(FOLDER_NAME) end)
+end
 
 -- Global Core States
 local accessoryList = {
@@ -23,7 +26,7 @@ local selectedIndex = 1
 -- Part Inspector Core Tracking States
 local isExploded = false
 local originalPositions = {}
-local originalAnchoredStates = {} -- Remembers if a part was naturally anchored
+local originalAnchoredStates = {} 
 local activeTweens = {}
 local EXPLODE_DISTANCE = 4.0 
 
@@ -60,7 +63,6 @@ local function applyAllAccessories()
 			end)
 			
 			if success and assetModel then
-				-- Dynamic Handle Selection for Accessories vs Raw Models
 				local handle = assetModel:FindFirstChild("Handle") or assetModel:FindFirstChildWhichIsA("Part", true) or assetModel:FindFirstChildWhichIsA("MeshPart", true)
 				if not handle and assetModel:IsA("Model") and assetModel.PrimaryPart then
 					handle = assetModel.PrimaryPart
@@ -91,7 +93,6 @@ local function applyAllAccessories()
 					local accessory = Instance.new("Accessory")
 					accessory.Name = "CustomBody_" .. tostring(index)
 					
-					-- Weld structure management for multi-part models
 					if assetModel:IsA("Model") then
 						for _, obj in ipairs(assetModel:GetDescendants()) do
 							if obj:IsA("BasePart") and obj ~= handle then
@@ -353,7 +354,7 @@ local inspectBtnCorner = Instance.new("UICorner")
 inspectBtnCorner.CornerRadius = UDim.new(0, 6)
 inspectBtnCorner.Parent = inspectBtn
 
--- Core Inspection Engine Logic (With Network-Safe Filtering)
+-- Core Inspection Engine Logic
 local function togglePartExplosion()
 	local character = player.Character
 	if not character then return end
@@ -373,7 +374,6 @@ local function togglePartExplosion()
 		table.clear(originalPositions)
 		table.clear(originalAnchoredStates)
 		
-		-- STEP 1: Scan and instantly lock anchoring BEFORE dropping joint states
 		for _, child in ipairs(character:GetChildren()) do
 			if child:IsA("Accessory") and string.sub(child.Name, 1, 11) == "CustomBody_" then
 				local handle = child:FindFirstChild("Handle")
@@ -393,10 +393,8 @@ local function togglePartExplosion()
 			end
 		end
 
-		-- STEP 2: Force Roblox physics pipeline to process the lock frame
 		task.wait(0.05) 
 
-		-- STEP 3: Safe displacement calculation without drop vulnerability
 		for part, origCFrame in pairs(originalPositions) do
 			if part and part.Parent then
 				local innerWeld = part:FindFirstChild("ModelInnerWeld") or part:FindFirstChild("AccessoryWeld")
@@ -424,7 +422,6 @@ local function togglePartExplosion()
 		inspectBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
 		inspectBtnStroke.Color = Color3.fromRGB(0, 150, 255)
 
-		-- STEP 4: Snap back home smoothly
 		for part, origCFrame in pairs(originalPositions) do
 			if part and part.Parent then
 				local tween = TweenService:Create(part, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {CFrame = origCFrame})
@@ -435,7 +432,6 @@ local function togglePartExplosion()
 						local innerWeld = part:FindFirstChild("ModelInnerWeld") or part:FindFirstChild("AccessoryWeld")
 						if innerWeld then innerWeld.Enabled = true end
 						
-						-- Small structural frame wait before resetting gravity values
 						task.wait()
 						part.Anchored = originalAnchoredStates[part] or false
 					end
@@ -559,7 +555,7 @@ saveBtn.Parent = savePanel
 
 saveBtn.MouseButton1Click:Connect(function()
 	local name = presetNameBox.Text
-	if name ~= "" and writefile then
+	if name ~= "" and HAS_FILESYSTEM then
 		local json = HttpService:JSONEncode(accessoryList)
 		local success = pcall(function()
 			writefile(FOLDER_NAME .. "/" .. name .. ".txt", json)
@@ -570,16 +566,21 @@ saveBtn.MouseButton1Click:Connect(function()
 			presetNameBox.Text = "PresetName"
 			updatePresetUI()
 		end
+	else
+		presetNameBox.Text = "No File Auth"
+		task.wait(1)
+		presetNameBox.Text = "PresetName"
 	end
 end)
 
 updatePresetUI = function()
 	presetPanel:ClearAllChildren()
+	if not HAS_FILESYSTEM then return end
+	
 	local pLayout = Instance.new("UIListLayout")
 	pLayout.Padding = UDim.new(0, 4)
 	pLayout.Parent = presetPanel
 	
-	if not listfiles then return end
 	local success, files = pcall(function() return listfiles(FOLDER_NAME) end)
 	if not success or not files then return end
 	
@@ -600,17 +601,15 @@ updatePresetUI = function()
 			loadBtn.Parent = pFrame
 			
 			loadBtn.MouseButton1Click:Connect(function()
-				if readfile then
-					local dataSuccess, content = pcall(function() return readfile(path) end)
-					if dataSuccess then
-						local tableSuccess, decoded = pcall(function() return HttpService:JSONDecode(content) end)
-						if tableSuccess and type(decoded) == "table" then
-							accessoryList = decoded
-							selectedIndex = 1
-							updateSlotUI()
-							updateEditUI()
-							applyAllAccessories()
-						end
+				local dataSuccess, content = pcall(function() return readfile(path) end)
+				if dataSuccess then
+					local tableSuccess, decoded = pcall(function() return HttpService:JSONDecode(content) end)
+					if tableSuccess and type(decoded) == "table" then
+						accessoryList = decoded
+						selectedIndex = 1
+						updateSlotUI()
+						updateEditUI()
+						applyAllAccessories()
 					end
 				end
 			end)
@@ -631,4 +630,3 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
- 
