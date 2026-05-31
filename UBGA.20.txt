@@ -1,4 +1,4 @@
--- Upper Body Mesh & Model Customizer (R6 Wide Layout - Pre-Scan Scale Inheritance Engine)
+-- Upper Body Mesh & Model Customizer (R6 Wide Layout - Overwrite Preset Auto-Update Engine)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -73,7 +73,6 @@ local function highlightSelectedSubPart()
 	end
 end
 
--- ADVANCED SCAN ENGINE: Reads asset blueprint structure & caches sizing matrix BEFORE character injection
 local function scanAssetAndPopulateData(slotIndex)
 	local data = accessoryList[slotIndex]
 	if not data or not data.id then return end
@@ -91,7 +90,6 @@ local function scanAssetAndPopulateData(slotIndex)
 		if handle then
 			handle.Name = "Handle"
 			
-			-- Base handle data safeguard initialization
 			if not data.partsData["Handle"] then
 				data.partsData["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
 			end
@@ -99,13 +97,11 @@ local function scanAssetAndPopulateData(slotIndex)
 			local partCounter = 1
 			for _, obj in ipairs(assetModel:GetDescendants()) do
 				if obj:IsA("BasePart") and obj ~= handle then
-					-- Uniform structural name normalization sequence
 					if obj.Name == "Part" or obj.Name == "MeshPart" or obj.Name == "" then
 						obj.Name = "Component_" .. tostring(partCounter)
 						partCounter = partCounter + 1
 					end
 					
-					-- Map exact default configurations out of the box preserving mesh design ratios
 					if not data.partsData[obj.Name] then
 						local defaultX, defaultY, defaultZ = 1, 1, 1
 						local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
@@ -181,7 +177,6 @@ local function applyAllAccessories()
 							
 							structuralOffsets[obj.Name] = handle.CFrame:ToObjectSpace(obj.CFrame)
 							
-							-- Emergency safeguard generation block
 							if not data.partsData[obj.Name] then
 								data.partsData[obj.Name] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
 							end
@@ -325,7 +320,7 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Text = "Sub-Part Model Customizer Engine (Pre-Scan Synchronized Engine)"
+title.Text = "Sub-Part Model Customizer Engine (Universal Patch)"
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 15
 title.Parent = frame
@@ -479,7 +474,6 @@ idBox.FocusLost:Connect(function()
 		local incomingID = tonumber(idBox.Text)
 		if incomingID and incomingID ~= accessoryList[selectedIndex].id then
 			accessoryList[selectedIndex].id = incomingID
-			-- CRITICAL INTERACTION HOOK: Instantly scan the model structure when the asset ID updates
 			scanAssetAndPopulateData(selectedIndex)
 			selectedSubPartName = "Handle"
 			updateEditUI()
@@ -727,7 +721,7 @@ updateSlotUI = function()
 		})
 		selectedIndex = #accessoryList
 		selectedSubPartName = "Handle"
-		scanAssetAndPopulateData(selectedIndex) -- Auto scan fresh custom slot objects instantly
+		scanAssetAndPopulateData(selectedIndex)
 		updateSlotUI()
 		updateEditUI()
 		highlightSelectedSubPart()
@@ -759,21 +753,30 @@ saveBtn.Font = Enum.Font.SourceSansBold
 saveBtn.TextSize = 13
 saveBtn.Parent = savePanel
 
+-- MODIFIED ACTION HOOK: Overwrites data automatically if the preset file already exists
 saveBtn.MouseButton1Click:Connect(function()
 	local name = presetNameBox.Text
-	if name ~= "" and HAS_FILESYSTEM then
+	if name ~= "" and name ~= "PresetName" and name ~= "Saved!" and name ~= "Updated!" and HAS_FILESYSTEM then
+		local targetFilePath = FOLDER_NAME .. "/" .. name .. ".txt"
+		local fileExists = pcall(function() return readfile(targetFilePath) end)
+		
 		local json = HttpService:JSONEncode(accessoryList)
 		local success = pcall(function()
-			writefile(FOLDER_NAME .. "/" .. name .. ".txt", json)
+			writefile(targetFilePath, json)
 		end)
+		
 		if success then
-			presetNameBox.Text = "Saved!"
+			if fileExists then
+				presetNameBox.Text = "Updated!"
+			else
+				presetNameBox.Text = "Saved!"
+			end
 			task.wait(1)
 			presetNameBox.Text = "PresetName"
 			updatePresetUI()
 		end
 	else
-		presetNameBox.Text = "No File Auth"
+		presetNameBox.Text = "Invalid Name"
 		task.wait(1)
 		presetNameBox.Text = "PresetName"
 	end
@@ -824,7 +827,6 @@ updatePresetUI = function()
 	end
 end
 
--- Initialize Engine Deployment Loops with immediate scanning
 scanAssetAndPopulateData(1)
 updateSlotUI()
 updateEditUI()
@@ -838,4 +840,3 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-
