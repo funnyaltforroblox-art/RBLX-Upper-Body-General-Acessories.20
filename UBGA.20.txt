@@ -1,4 +1,4 @@
--- Upper Body Mesh & Model Customizer (R6 Wide Layout - Matrix Preservation Engine)
+-- Upper Body Mesh & Model Customizer (R6 Wide Layout - Pre-Scan Scale Inheritance Engine)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -73,6 +73,62 @@ local function highlightSelectedSubPart()
 	end
 end
 
+-- ADVANCED SCAN ENGINE: Reads asset blueprint structure & caches sizing matrix BEFORE character injection
+local function scanAssetAndPopulateData(slotIndex)
+	local data = accessoryList[slotIndex]
+	if not data or not data.id then return end
+	
+	local success, assetModel = pcall(function()
+		return game:GetObjects("rbxassetid://" .. data.id)[1]
+	end)
+	
+	if success and assetModel then
+		local handle = assetModel:FindFirstChild("Handle") or assetModel:FindFirstChildWhichIsA("Part", true) or assetModel:FindFirstChildWhichIsA("MeshPart", true)
+		if not handle and assetModel:IsA("Model") and assetModel.PrimaryPart then
+			handle = assetModel.PrimaryPart
+		end
+		
+		if handle then
+			handle.Name = "Handle"
+			
+			-- Base handle data safeguard initialization
+			if not data.partsData["Handle"] then
+				data.partsData["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
+			end
+			
+			local partCounter = 1
+			for _, obj in ipairs(assetModel:GetDescendants()) do
+				if obj:IsA("BasePart") and obj ~= handle then
+					-- Uniform structural name normalization sequence
+					if obj.Name == "Part" or obj.Name == "MeshPart" or obj.Name == "" then
+						obj.Name = "Component_" .. tostring(partCounter)
+						partCounter = partCounter + 1
+					end
+					
+					-- Map exact default configurations out of the box preserving mesh design ratios
+					if not data.partsData[obj.Name] then
+						local defaultX, defaultY, defaultZ = 1, 1, 1
+						local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
+						
+						if mesh then
+							defaultX, defaultY, defaultZ = mesh.Scale.X, mesh.Scale.Y, mesh.Scale.Z
+						else
+							defaultX, defaultY, defaultZ = obj.Size.X, obj.Size.Y, obj.Size.Z
+						end
+						
+						data.partsData[obj.Name] = {
+							offsetX = 0, offsetY = 0, offsetZ = 0, 
+							rotateX = 0, rotateY = 0, rotateZ = 0, 
+							scaleX = defaultX, scaleY = defaultY, scaleZ = defaultZ
+						}
+					end
+				end
+			end
+		end
+		assetModel:Destroy()
+	end
+end
+
 local function clearPhysicalAccessories()
 	clearActiveHighlight()
 	local character = player.Character
@@ -113,7 +169,6 @@ local function applyAllAccessories()
 				if handle then
 					handle.Name = "Handle"
 					
-					-- CRITICAL FIX: Capture visual CFrame offset matrix *before* breaking spatial data
 					local structuralOffsets = {}
 					local partCounter = 1
 					
@@ -124,28 +179,29 @@ local function applyAllAccessories()
 								partCounter = partCounter + 1
 							end
 							
-							-- Store exactly where this part sits relative to the model handle out of the box
 							structuralOffsets[obj.Name] = handle.CFrame:ToObjectSpace(obj.CFrame)
 							
+							-- Emergency safeguard generation block
 							if not data.partsData[obj.Name] then
 								data.partsData[obj.Name] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
 							end
 						end
 					end
 
-					-- Set scales safely
 					for _, obj in ipairs(assetModel:GetDescendants()) do
 						if obj:IsA("BasePart") then
 							obj.Anchored = false
 							obj.CanCollide = false
 							obj.Massless = true
 							
-							local pData = data.partsData[obj.Name] or {scaleX=1, scaleY=1, scaleZ=1}
-							local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
-							if mesh then
-								mesh.Scale = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
-							elseif obj:IsA("MeshPart") or not mesh then
-								obj.Size = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
+							local pData = data.partsData[obj.Name]
+							if pData then
+								local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
+								if mesh then
+									mesh.Scale = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
+								else
+									obj.Size = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
+								end
 							end
 						elseif obj:IsA("Weld") or obj:IsA("ManualWeld") or obj:IsA("WeldConstraint") or obj:IsA("Attachment") then
 							obj:Destroy()
@@ -164,7 +220,6 @@ local function applyAllAccessories()
 								innerWeld.Part0 = obj
 								innerWeld.Part1 = handle
 								
-								-- Combines original 3D modeling position with your custom adjustments
 								local originalLocalCFrame = structuralOffsets[obj.Name] or CFrame.new()
 								local customPosOffset = CFrame.new(pData.offsetX, pData.offsetY, pData.offsetZ)
 								local customRotOffset = CFrame.Angles(math.rad(pData.rotateX), math.rad(pData.rotateY), math.rad(pData.rotateZ))
@@ -270,7 +325,7 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Text = "Sub-Part Model Customizer Engine (Visual Grid Fix)"
+title.Text = "Sub-Part Model Customizer Engine (Pre-Scan Synchronized Engine)"
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 15
 title.Parent = frame
@@ -418,9 +473,17 @@ idBox.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
 idBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 idBox.ClearTextOnFocus = false
 idBox.Parent = editPanel
+
 idBox.FocusLost:Connect(function()
 	if accessoryList[selectedIndex] then
-		accessoryList[selectedIndex].id = tonumber(idBox.Text) or accessoryList[selectedIndex].id
+		local incomingID = tonumber(idBox.Text)
+		if incomingID and incomingID ~= accessoryList[selectedIndex].id then
+			accessoryList[selectedIndex].id = incomingID
+			-- CRITICAL INTERACTION HOOK: Instantly scan the model structure when the asset ID updates
+			scanAssetAndPopulateData(selectedIndex)
+			selectedSubPartName = "Handle"
+			updateEditUI()
+		end
 	end
 end)
 
@@ -664,6 +727,7 @@ updateSlotUI = function()
 		})
 		selectedIndex = #accessoryList
 		selectedSubPartName = "Handle"
+		scanAssetAndPopulateData(selectedIndex) -- Auto scan fresh custom slot objects instantly
 		updateSlotUI()
 		updateEditUI()
 		highlightSelectedSubPart()
@@ -760,6 +824,8 @@ updatePresetUI = function()
 	end
 end
 
+-- Initialize Engine Deployment Loops with immediate scanning
+scanAssetAndPopulateData(1)
 updateSlotUI()
 updateEditUI()
 updatePresetUI()
