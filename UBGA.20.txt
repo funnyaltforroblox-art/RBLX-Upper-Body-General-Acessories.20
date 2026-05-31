@@ -1,15 +1,14 @@
--- Lower Body/Leg Mesh & Model Customizer (R6 Wide Layout - Overwrite Preset Auto-Update Engine)
+-- Upper Body Mesh & Model Customizer (R6 Wide Layout - Overwrite Preset Auto-Update Engine)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 repeat task.wait() until player:FindFirstChild("PlayerGui")
 
-local FOLDER_NAME = "LowerBodyCustomizer_Presets"
+local FOLDER_NAME = "UpperBodyCustomizer_Presets"
 local HAS_FILESYSTEM = (makefolder ~= nil) and (writefile ~= nil) and (readfile ~= nil) and (listfiles ~= nil)
 
 if HAS_FILESYSTEM then
@@ -19,8 +18,7 @@ end
 local accessoryList = {
 	{
 		id = 17121838966, 
-		targetPart = "Left Leg", 
-		firstPersonVisible = false, -- New core persistent parameter
+		targetPart = "Head", 
 		partsData = {
 			["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
 		}
@@ -46,7 +44,7 @@ end
 local function findPhysicalPartInCharacter(slotIndex, partName)
 	local character = player.Character
 	if not character then return nil end
-	local accessory = character:FindFirstChild("CustomLeg_" .. tostring(slotIndex))
+	local accessory = character:FindFirstChild("CustomBody_" .. tostring(slotIndex))
 	if not accessory then return nil end
 	
 	if partName == "Handle" then
@@ -78,10 +76,6 @@ end
 local function scanAssetAndPopulateData(slotIndex)
 	local data = accessoryList[slotIndex]
 	if not data or not data.id then return end
-	
-	if data.firstPersonVisible == nil then
-		data.firstPersonVisible = false
-	end
 	
 	local success, assetModel = pcall(function()
 		return game:GetObjects("rbxassetid://" .. data.id)[1]
@@ -136,7 +130,7 @@ local function clearPhysicalAccessories()
 	local character = player.Character
 	if character then
 		for _, child in ipairs(character:GetChildren()) do
-			if child:IsA("Accessory") and string.sub(child.Name, 1, 10) == "CustomLeg_" then
+			if child:IsA("Accessory") and string.sub(child.Name, 1, 11) == "CustomBody_" then
 				child:Destroy()
 			end
 		end
@@ -210,7 +204,7 @@ local function applyAllAccessories()
 					end
 					
 					local accessory = Instance.new("Accessory")
-					accessory.Name = "CustomLeg_" .. tostring(index)
+					accessory.Name = "CustomBody_" .. tostring(index)
 					
 					if assetModel:IsA("Model") then
 						for _, obj in ipairs(assetModel:GetDescendants()) do
@@ -245,7 +239,10 @@ local function applyAllAccessories()
 					weld.Part0 = handle
 					weld.Part1 = limb
 					
-					weld.C0 = CFrame.new(rootData.offsetX, rootData.offsetY, rootData.offsetZ) * CFrame.Angles(math.rad(rootData.rotateX), math.rad(rootData.rotateY), math.rad(rootData.rotateZ))
+					local positionOffset = CFrame.new(rootData.offsetX, rootData.offsetY, rootData.offsetZ)
+					local rotationOffset = CFrame.Angles(math.rad(rootData.rotateX), math.rad(rootData.rotateY), math.rad(rootData.rotateZ))
+					
+					weld.C0 = positionOffset * rotationOffset
 					weld.Parent = handle
 					
 					accessory.Parent = character
@@ -257,28 +254,9 @@ local function applyAllAccessories()
 	task.defer(highlightSelectedSubPart)
 end
 
--- RenderStepped connection handles local camera transparency updates natively every frame
-RunService.RenderStepped:Connect(function()
-	local character = player.Character
-	if not character then return end
-	
-	for index, data in ipairs(accessoryList) do
-		if data.firstPersonVisible then
-			local accessory = character:FindFirstChild("CustomLeg_" .. tostring(index))
-			if accessory then
-				for _, part in ipairs(accessory:GetDescendants()) do
-					if part:IsA("BasePart") then
-						part.LocalTransparencyModifier = 0
-					end
-				end
-			end
-		end
-	end
-end)
-
 -- UI Initialization
 local sgui = Instance.new("ScreenGui")
-sgui.Name = "LowerBodyMasterGUI"
+sgui.Name = "UpperBodyMasterGUI"
 sgui.ResetOnSpawn = false
 sgui.Parent = player:WaitForChild("PlayerGui")
 
@@ -342,7 +320,7 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Text = "Sub-Part Leg Model Customizer Engine"
+title.Text = "Sub-Part Model Customizer Engine (Universal Patch)"
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 15
 title.Parent = frame
@@ -503,14 +481,14 @@ idBox.FocusLost:Connect(function()
 	end
 end)
 
-local targets = {"Left Leg", "Right Leg"}
+local targets = {"Head", "Torso", "Left Arm", "Right Arm"}
 local targetButtons = {}
 
 for idx, limbName in ipairs(targets) do
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(0, 72, 0, 24)
-	local xPos = (idx == 1) and 165 or 242
-	local yPos = 170
+	local xPos = (idx % 2 == 1) and 165 or 242
+	local yPos = (idx <= 2) and 170 or 200
 	
 	btn.Position = UDim2.new(0, xPos, 0, yPos)
 	btn.Font = Enum.Font.SourceSansBold
@@ -527,25 +505,6 @@ for idx, limbName in ipairs(targets) do
 	end)
 	targetButtons[limbName] = btn
 end
-
--- New First Person Toggle View Button
-local fpToggleBtn = Instance.new("TextButton")
-fpToggleBtn.Size = UDim2.new(0, 149, 0, 24)
-fpToggleBtn.Position = UDim2.new(0, 165, 0, 200)
-fpToggleBtn.Font = Enum.Font.SourceSansBold
-fpToggleBtn.TextSize = 11
-fpToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-fpToggleBtn.Text = "FP VISIBLE: OFF"
-fpToggleBtn.BackgroundColor3 = Color3.fromRGB(90, 40, 40)
-fpToggleBtn.Parent = editPanel
-
-fpToggleBtn.MouseButton1Click:Connect(function()
-	local data = accessoryList[selectedIndex]
-	if data then
-		data.firstPersonVisible = not data.firstPersonVisible
-		updateEditUI()
-	end
-end)
 
 local applyBtn = Instance.new("TextButton")
 applyBtn.Size = UDim2.new(0, 150, 0, 32)
@@ -596,7 +555,7 @@ local function togglePartExplosion()
 		table.clear(originalAnchoredStates)
 		
 		for _, child in ipairs(character:GetChildren()) do
-			if child:IsA("Accessory") and string.sub(child.Name, 1, 10) == "CustomLeg_" then
+			if child:IsA("Accessory") and string.sub(child.Name, 1, 11) == "CustomBody_" then
 				local handle = child:FindFirstChild("Handle")
 				if handle then
 					originalPositions[handle] = handle.CFrame
@@ -672,16 +631,6 @@ updateEditUI = function()
 	
 	idBox.Text = tostring(data.id)
 	
-	if data.firstPersonVisible == nil then data.firstPersonVisible = false end
-	
-	if data.firstPersonVisible then
-		fpToggleBtn.Text = "FP VISIBLE: ON"
-		fpToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 90, 40)
-	else
-		fpToggleBtn.Text = "FP VISIBLE: OFF"
-		fpToggleBtn.BackgroundColor3 = Color3.fromRGB(90, 40, 40)
-	end
-	
 	if not data.partsData[selectedSubPartName] then
 		selectedSubPartName = "Handle"
 		if not data.partsData["Handle"] then
@@ -722,7 +671,7 @@ updateSlotUI = function()
 		selBtn.Size = UDim2.new(0, 120, 1, 0)
 		selBtn.BackgroundColor3 = (i == selectedIndex) and Color3.fromRGB(0, 90, 160) or Color3.fromRGB(40, 40, 40)
 		selBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-		local limbAbbr = (data.targetPart == "Left Leg") and "LL" or "RL"
+		local limbAbbr = (data.targetPart == "Left Arm") and "LA" or (data.targetPart == "Right Arm") and "RA" or string.sub(data.targetPart, 1, 4)
 		selBtn.Text = "Slot " .. tostring(i) .. " (" .. limbAbbr .. ")"
 		selBtn.Font = Enum.Font.SourceSans
 		selBtn.TextSize = 13
@@ -767,8 +716,7 @@ updateSlotUI = function()
 	addBtn.MouseButton1Click:Connect(function()
 		table.insert(accessoryList, {
 			id = 17121838966, 
-			targetPart = "Left Leg", 
-			firstPersonVisible = false,
+			targetPart = "Head", 
 			partsData = { ["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1} }
 		})
 		selectedIndex = #accessoryList
@@ -805,6 +753,7 @@ saveBtn.Font = Enum.Font.SourceSansBold
 saveBtn.TextSize = 13
 saveBtn.Parent = savePanel
 
+-- MODIFIED ACTION HOOK: Overwrites data automatically if the preset file already exists
 saveBtn.MouseButton1Click:Connect(function()
 	local name = presetNameBox.Text
 	if name ~= "" and name ~= "PresetName" and name ~= "Saved!" and name ~= "Updated!" and HAS_FILESYSTEM then
@@ -891,4 +840,3 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-
