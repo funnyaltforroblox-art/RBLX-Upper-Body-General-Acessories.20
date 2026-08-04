@@ -1,4 +1,4 @@
--- Upper Body Mesh & Model Customizer (R6 Wide Layout - Overwrite Preset Auto-Update Engine + HP Mesh Hide Threshold)
+-- Upper Body Mesh & Model Customizer (R6 Wide Layout - Overwrite Preset Auto-Update Engine + HP Mesh Hide Threshold Fixed)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -22,7 +22,7 @@ local accessoryList = {
 		targetPart = "Head", 
 		firstPersonVisible = false,
 		hideHp = false,
-		hpThreshold = 100, -- Default: hide accessory when HP is at or below 100%
+		hpThreshold = 100,
 		partsData = {
 			["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
 		}
@@ -37,6 +37,17 @@ local originalAnchoredStates = {}
 local activeTweens = {}
 local EXPLODE_DISTANCE = 4.0 
 local currentHighlightBox = nil
+
+local function sanitizeAccessoryData(data)
+	if not data then return end
+	if data.firstPersonVisible == nil then data.firstPersonVisible = false end
+	if data.hideHp == nil then data.hideHp = false end
+	if data.hpThreshold == nil then data.hpThreshold = 100 end
+	if not data.partsData then data.partsData = {} end
+	if not data.partsData["Handle"] then
+		data.partsData["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
+	end
+end
 
 local function clearActiveHighlight()
 	if currentHighlightBox then
@@ -81,9 +92,7 @@ local function scanAssetAndPopulateData(slotIndex)
 	local data = accessoryList[slotIndex]
 	if not data or not data.id then return end
 	
-	if data.firstPersonVisible == nil then data.firstPersonVisible = false end
-	if data.hideHp == nil then data.hideHp = false end
-	if data.hpThreshold == nil then data.hpThreshold = 100 end
+	sanitizeAccessoryData(data)
 	
 	local success, assetModel = pcall(function()
 		return game:GetObjects("rbxassetid://" .. data.id)[1]
@@ -97,10 +106,6 @@ local function scanAssetAndPopulateData(slotIndex)
 		
 		if handle then
 			handle.Name = "Handle"
-			
-			if not data.partsData["Handle"] then
-				data.partsData["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
-			end
 			
 			local partCounter = 1
 			for _, obj in ipairs(assetModel:GetDescendants()) do
@@ -158,6 +163,7 @@ local function applyAllAccessories()
 	clearPhysicalAccessories()
 	
 	for index, data in ipairs(accessoryList) do
+		sanitizeAccessoryData(data)
 		local limb = character:FindFirstChild(data.targetPart)
 		if limb then
 			local success, assetModel = pcall(function()
@@ -268,12 +274,15 @@ RunService.RenderStepped:Connect(function()
 	if not character then return end
 
 	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
+
 	local currentHpPercent = 100
-	if humanoid and humanoid.MaxHealth > 0 then
+	if humanoid.MaxHealth > 0 then
 		currentHpPercent = (humanoid.Health / humanoid.MaxHealth) * 100
 	end
 
 	for index, data in ipairs(accessoryList) do
+		sanitizeAccessoryData(data)
 		local accessory = character:FindFirstChild("CustomBody_" .. tostring(index))
 		if accessory then
 			local threshold = data.hpThreshold or 100
@@ -282,14 +291,12 @@ RunService.RenderStepped:Connect(function()
 			for _, part in ipairs(accessory:GetDescendants()) do
 				if part:IsA("BasePart") then
 					if shouldHideForHP then
-						-- Force full transparency when HP threshold is triggered
 						part.LocalTransparencyModifier = 1
 						part.Transparency = 1
 					elseif data.firstPersonVisible then
-						-- Keep visible in first person if toggle is active
 						part.LocalTransparencyModifier = 0
+						part.Transparency = 0
 					else
-						-- Default Roblox camera behavior
 						part.Transparency = 0
 					end
 				end
@@ -460,6 +467,7 @@ local function updateSubPartDropdown()
 	
 	local activeData = accessoryList[selectedIndex]
 	if not activeData then return end
+	sanitizeAccessoryData(activeData)
 	
 	partSelectBtn.Text = "Editing Component: " .. selectedSubPartName
 	
@@ -779,12 +787,8 @@ updateEditUI = function()
 	local data = accessoryList[selectedIndex]
 	if not data then return end
 	
+	sanitizeAccessoryData(data)
 	idBox.Text = tostring(data.id)
-	
-	if data.firstPersonVisible == nil then data.firstPersonVisible = false end
-	if data.hideHp == nil then data.hideHp = false end
-	if data.hpThreshold == nil then data.hpThreshold = 100 end
-	
 	hpThreshBox.Text = tostring(data.hpThreshold)
 
 	if data.firstPersonVisible then
@@ -805,9 +809,6 @@ updateEditUI = function()
 	
 	if not data.partsData[selectedSubPartName] then
 		selectedSubPartName = "Handle"
-		if not data.partsData["Handle"] then
-			data.partsData["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
-		end
 	end
 	
 	local pData = data.partsData[selectedSubPartName]
@@ -834,6 +835,7 @@ updateSlotUI = function()
 	layout.Parent = slotPanel
 	
 	for i, data in ipairs(accessoryList) do
+		sanitizeAccessoryData(data)
 		local sFrame = Instance.new("Frame")
 		sFrame.Size = UDim2.new(1, 0, 0, 30)
 		sFrame.BackgroundTransparency = 1
@@ -934,6 +936,10 @@ saveBtn.MouseButton1Click:Connect(function()
 		local targetFilePath = FOLDER_NAME .. "/" .. name .. ".txt"
 		local fileExists = pcall(function() return readfile(targetFilePath) end)
 		
+		for _, data in ipairs(accessoryList) do
+			sanitizeAccessoryData(data)
+		end
+		
 		local json = HttpService:JSONEncode(accessoryList)
 		local success = pcall(function()
 			writefile(targetFilePath, json)
@@ -990,9 +996,7 @@ updatePresetUI = function()
 					if tableSuccess and type(decoded) == "table" then
 						accessoryList = decoded
 						for idx, data in ipairs(accessoryList) do
-							if data.hideHp == nil then data.hideHp = false end
-							if data.hpThreshold == nil then data.hpThreshold = 100 end
-							if data.firstPersonVisible == nil then data.firstPersonVisible = false end
+							sanitizeAccessoryData(data)
 						end
 						selectedIndex = 1
 						selectedSubPartName = "Handle"
@@ -1019,4 +1023,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("oi")
+print("More bugs to fix later")
