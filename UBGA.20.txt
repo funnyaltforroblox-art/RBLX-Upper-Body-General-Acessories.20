@@ -1,4 +1,4 @@
--- Upper Body Mesh & Model Customizer (R6 Wide Layout - Overwrite Preset Auto-Update Engine)
+-- Upper Body Mesh & Model Customizer (R6 Wide Layout - Overwrite Preset Auto-Update Engine + HP Hide)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -21,6 +21,7 @@ local accessoryList = {
 		id = 17121838966, 
 		targetPart = "Head", 
 		firstPersonVisible = false,
+		hideHp = false,
 		partsData = {
 			["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
 		}
@@ -79,9 +80,8 @@ local function scanAssetAndPopulateData(slotIndex)
 	local data = accessoryList[slotIndex]
 	if not data or not data.id then return end
 	
-	if data.firstPersonVisible == nil then
-		data.firstPersonVisible = false
-	end
+	if data.firstPersonVisible == nil then data.firstPersonVisible = false end
+	if data.hideHp == nil then data.hideHp = false end
 	
 	local success, assetModel = pcall(function()
 		return game:GetObjects("rbxassetid://" .. data.id)[1]
@@ -260,10 +260,44 @@ local function applyAllAccessories()
 	task.defer(highlightSelectedSubPart)
 end
 
+-- Render loop for First Person & HP Hiding Engine
 RunService.RenderStepped:Connect(function()
 	local character = player.Character
 	if not character then return end
-	
+
+	-- Check if any slot has HP Hide active
+	local shouldHideHP = false
+	for _, data in ipairs(accessoryList) do
+		if data.hideHp then
+			shouldHideHP = true
+			break
+		end
+	end
+
+	-- Handle Humanoid Default HP display
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		if shouldHideHP then
+			humanoid.HealthDisplayDistance = 0
+			humanoid.NameDisplayDistance = 0
+			humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+		else
+			humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer
+		end
+	end
+
+	-- Handle custom overhead BillboardGuis/Health bars inside character
+	for _, child in ipairs(character:GetDescendants()) do
+		if child:IsA("BillboardGui") then
+			if shouldHideHP then
+				child.Enabled = false
+			else
+				child.Enabled = true
+			end
+		end
+	end
+
+	-- First Person Visibility Loop
 	for index, data in ipairs(accessoryList) do
 		if data.firstPersonVisible then
 			local accessory = character:FindFirstChild("CustomBody_" .. tostring(index))
@@ -572,12 +606,12 @@ for idx, limbName in ipairs(targets) do
 end
 
 local fpToggleBtn = Instance.new("TextButton")
-fpToggleBtn.Size = UDim2.new(0, 149, 0, 24)
+fpToggleBtn.Size = UDim2.new(0, 72, 0, 24)
 fpToggleBtn.Position = UDim2.new(0, 155, 0, 232)
 fpToggleBtn.Font = Enum.Font.SourceSansBold
-fpToggleBtn.TextSize = 11
+fpToggleBtn.TextSize = 10
 fpToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-fpToggleBtn.Text = "FP VISIBLE: OFF"
+fpToggleBtn.Text = "FP: OFF"
 fpToggleBtn.BackgroundColor3 = Color3.fromRGB(90, 40, 40)
 fpToggleBtn.Parent = editPanel
 
@@ -585,6 +619,24 @@ fpToggleBtn.MouseButton1Click:Connect(function()
 	local data = accessoryList[selectedIndex]
 	if data then
 		data.firstPersonVisible = not data.firstPersonVisible
+		updateEditUI()
+	end
+end)
+
+local hpHideBtn = Instance.new("TextButton")
+hpHideBtn.Size = UDim2.new(0, 72, 0, 24)
+hpHideBtn.Position = UDim2.new(0, 232, 0, 232)
+hpHideBtn.Font = Enum.Font.SourceSansBold
+hpHideBtn.TextSize = 10
+hpHideBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+hpHideBtn.Text = "HP HIDE: OFF"
+hpHideBtn.BackgroundColor3 = Color3.fromRGB(90, 40, 40)
+hpHideBtn.Parent = editPanel
+
+hpHideBtn.MouseButton1Click:Connect(function()
+	local data = accessoryList[selectedIndex]
+	if data then
+		data.hideHp = not data.hideHp
 		updateEditUI()
 	end
 end)
@@ -716,13 +768,22 @@ updateEditUI = function()
 	idBox.Text = tostring(data.id)
 	
 	if data.firstPersonVisible == nil then data.firstPersonVisible = false end
+	if data.hideHp == nil then data.hideHp = false end
 	
 	if data.firstPersonVisible then
-		fpToggleBtn.Text = "FP VISIBLE: ON"
+		fpToggleBtn.Text = "FP: ON"
 		fpToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 90, 40)
 	else
-		fpToggleBtn.Text = "FP VISIBLE: OFF"
+		fpToggleBtn.Text = "FP: OFF"
 		fpToggleBtn.BackgroundColor3 = Color3.fromRGB(90, 40, 40)
+	end
+
+	if data.hideHp then
+		hpHideBtn.Text = "HP HIDE: ON"
+		hpHideBtn.BackgroundColor3 = Color3.fromRGB(40, 90, 40)
+	else
+		hpHideBtn.Text = "HP HIDE: OFF"
+		hpHideBtn.BackgroundColor3 = Color3.fromRGB(90, 40, 40)
 	end
 	
 	if not data.partsData[selectedSubPartName] then
@@ -812,6 +873,7 @@ updateSlotUI = function()
 			id = 17121838966, 
 			targetPart = "Head", 
 			firstPersonVisible = false,
+			hideHp = false,
 			partsData = { ["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1} }
 		})
 		selectedIndex = #accessoryList
@@ -909,6 +971,10 @@ updatePresetUI = function()
 					local tableSuccess, decoded = pcall(function() return HttpService:JSONDecode(content) end)
 					if tableSuccess and type(decoded) == "table" then
 						accessoryList = decoded
+						for idx, data in ipairs(accessoryList) do
+							if data.hideHp == nil then data.hideHp = false end
+							if data.firstPersonVisible == nil then data.firstPersonVisible = false end
+						end
 						selectedIndex = 1
 						selectedSubPartName = "Handle"
 						updateSlotUI()
