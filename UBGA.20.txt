@@ -1,4 +1,4 @@
--- Upper Body Mesh & Model Customizer (R6 Wide Layout - Overwrite Preset Auto-Update Engine + HP Mesh Hide Threshold Fixed)
+-- Upper Body Mesh & Model Customizer (R6 Wide Layout - Isolated Preset & HP Threshold Engine)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -39,11 +39,11 @@ local EXPLODE_DISTANCE = 4.0
 local currentHighlightBox = nil
 
 local function sanitizeAccessoryData(data)
-	if not data then return end
+	if not data or type(data) ~= "table" then return end
 	if data.firstPersonVisible == nil then data.firstPersonVisible = false end
 	if data.hideHp == nil then data.hideHp = false end
-	if data.hpThreshold == nil then data.hpThreshold = 100 end
-	if not data.partsData then data.partsData = {} end
+	data.hpThreshold = tonumber(data.hpThreshold) or 100
+	if not data.partsData or type(data.partsData) ~= "table" then data.partsData = {} end
 	if not data.partsData["Handle"] then
 		data.partsData["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
 	end
@@ -285,7 +285,7 @@ RunService.RenderStepped:Connect(function()
 		sanitizeAccessoryData(data)
 		local accessory = character:FindFirstChild("CustomBody_" .. tostring(index))
 		if accessory then
-			local threshold = data.hpThreshold or 100
+			local threshold = tonumber(data.hpThreshold) or 100
 			local shouldHideForHP = data.hideHp and (currentHpPercent <= threshold)
 			
 			for _, part in ipairs(accessory:GetDescendants()) do
@@ -675,7 +675,7 @@ hpThreshBox.Focused:Connect(function()
 	boundHpSlot = selectedIndex
 end)
 
-hpThreshBox.FocusLost:Connect(function()
+local function commitHpThreshold()
 	local data = accessoryList[boundHpSlot]
 	if data then
 		local num = tonumber(hpThreshBox.Text)
@@ -686,7 +686,9 @@ hpThreshBox.FocusLost:Connect(function()
 			hpThreshBox.Text = tostring(data.hpThreshold or 100)
 		end
 	end
-end)
+end
+
+hpThreshBox.FocusLost:Connect(commitHpThreshold)
 
 local applyBtn = Instance.new("TextButton")
 applyBtn.Size = UDim2.new(0, 145, 0, 32)
@@ -697,7 +699,10 @@ applyBtn.Text = "APPLY ALL"
 applyBtn.Font = Enum.Font.SourceSansBold
 applyBtn.TextSize = 14
 applyBtn.Parent = editPanel
-applyBtn.MouseButton1Click:Connect(applyAllAccessories)
+applyBtn.MouseButton1Click:Connect(function()
+	commitHpThreshold()
+	applyAllAccessories()
+end)
 
 local inspectBtn = Instance.new("TextButton")
 inspectBtn.Size = UDim2.new(0, 315, 0, 32)
@@ -876,6 +881,7 @@ updateSlotUI = function()
 		selBtn.Parent = sFrame
 		
 		selBtn.MouseButton1Click:Connect(function()
+			commitHpThreshold()
 			selectedIndex = i
 			selectedSubPartName = "Handle"
 			updateSlotUI()
@@ -912,6 +918,7 @@ updateSlotUI = function()
 	addBtn.Font = Enum.Font.SourceSansBold
 	addBtn.Parent = slotPanel
 	addBtn.MouseButton1Click:Connect(function()
+		commitHpThreshold()
 		table.insert(accessoryList, {
 			id = 17121838966, 
 			targetPart = "Head", 
@@ -955,6 +962,7 @@ saveBtn.TextSize = 13
 saveBtn.Parent = savePanel
 
 saveBtn.MouseButton1Click:Connect(function()
+	commitHpThreshold()
 	local name = presetNameBox.Text
 	if name ~= "" and name ~= "PresetName" and name ~= "Saved!" and name ~= "Updated!" and HAS_FILESYSTEM then
 		local targetFilePath = FOLDER_NAME .. "/" .. name .. ".txt"
@@ -1047,4 +1055,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("rahrahrah")
+print("Refactored The Blah Blah")
