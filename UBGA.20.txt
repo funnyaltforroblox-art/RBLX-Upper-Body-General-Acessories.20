@@ -517,14 +517,24 @@ local function createEditInput(labelName, property, x, y)
 	box.TextSize = 13
 	box.Parent = editPanel
 
+	local boundSlot = 1
+	local boundSubPart = "Handle"
+
+	box.Focused:Connect(function()
+		boundSlot = selectedIndex
+		boundSubPart = selectedSubPartName
+	end)
+
 	box.FocusLost:Connect(function()
-		local data = accessoryList[selectedIndex]
-		if data and data.partsData[selectedSubPartName] then
+		local data = accessoryList[boundSlot]
+		if data and data.partsData and data.partsData[boundSubPart] then
 			local numValue = tonumber(box.Text)
 			if numValue then
-				data.partsData[selectedSubPartName][property] = numValue
+				data.partsData[boundSubPart][property] = numValue
 			end
-			box.Text = tostring(data.partsData[selectedSubPartName][property] or 0)
+			if selectedIndex == boundSlot and selectedSubPartName == boundSubPart then
+				box.Text = tostring(data.partsData[boundSubPart][property] or 0)
+			end
 		end
 	end)
 	inputs[property] = box
@@ -560,14 +570,21 @@ idBox.TextColor3 = Color3.fromRGB(255, 255, 255)
 idBox.ClearTextOnFocus = false
 idBox.Parent = editPanel
 
+local boundIdSlot = 1
+idBox.Focused:Connect(function()
+	boundIdSlot = selectedIndex
+end)
+
 idBox.FocusLost:Connect(function()
-	if accessoryList[selectedIndex] then
+	if accessoryList[boundIdSlot] then
 		local incomingID = tonumber(idBox.Text)
-		if incomingID and incomingID ~= accessoryList[selectedIndex].id then
-			accessoryList[selectedIndex].id = incomingID
-			scanAssetAndPopulateData(selectedIndex)
-			selectedSubPartName = "Handle"
-			updateEditUI()
+		if incomingID and incomingID ~= accessoryList[boundIdSlot].id then
+			accessoryList[boundIdSlot].id = incomingID
+			scanAssetAndPopulateData(boundIdSlot)
+			if selectedIndex == boundIdSlot then
+				selectedSubPartName = "Handle"
+				updateEditUI()
+			end
 		end
 	end
 end)
@@ -653,14 +670,21 @@ hpThreshBox.TextSize = 12
 hpThreshBox.Text = "100"
 hpThreshBox.Parent = editPanel
 
+local boundHpSlot = 1
+hpThreshBox.Focused:Connect(function()
+	boundHpSlot = selectedIndex
+end)
+
 hpThreshBox.FocusLost:Connect(function()
-	local data = accessoryList[selectedIndex]
+	local data = accessoryList[boundHpSlot]
 	if data then
 		local num = tonumber(hpThreshBox.Text)
 		if num then
 			data.hpThreshold = math.clamp(num, 0, 100)
 		end
-		hpThreshBox.Text = tostring(data.hpThreshold or 100)
+		if selectedIndex == boundHpSlot then
+			hpThreshBox.Text = tostring(data.hpThreshold or 100)
+		end
 	end
 end)
 
@@ -789,7 +813,7 @@ updateEditUI = function()
 	
 	sanitizeAccessoryData(data)
 	idBox.Text = tostring(data.id)
-	hpThreshBox.Text = tostring(data.hpThreshold)
+	hpThreshBox.Text = tostring(data.hpThreshold or 100)
 
 	if data.firstPersonVisible then
 		fpToggleBtn.Text = "FP: ON"
@@ -1023,4 +1047,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("More bugs to fix later")
+print("rahrahrah")
