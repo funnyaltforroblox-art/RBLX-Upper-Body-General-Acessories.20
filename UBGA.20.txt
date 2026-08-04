@@ -1000,3 +1000,5 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
+print("Oi waddup lad")
+
