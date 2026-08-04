@@ -1,4 +1,4 @@
--- Upper Body Mesh & Model Customizer (R6 Wide Layout - Overwrite Preset Auto-Update Engine + HP Hide Threshold)
+-- Upper Body Mesh & Model Customizer (R6 Wide Layout - Overwrite Preset Auto-Update Engine + HP Mesh Hide Threshold)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -22,7 +22,7 @@ local accessoryList = {
 		targetPart = "Head", 
 		firstPersonVisible = false,
 		hideHp = false,
-		hpThreshold = 100, -- Default: hide when HP is at or below 100%
+		hpThreshold = 100, -- Default: hide accessory when HP is at or below 100%
 		partsData = {
 			["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
 		}
@@ -262,7 +262,7 @@ local function applyAllAccessories()
 	task.defer(highlightSelectedSubPart)
 end
 
--- Render loop for First Person & Threshold-Based HP Hiding Engine
+-- Render loop for Accessory Hiding (via HP Threshold) & First-Person Visibility
 RunService.RenderStepped:Connect(function()
 	local character = player.Character
 	if not character then return end
@@ -273,42 +273,24 @@ RunService.RenderStepped:Connect(function()
 		currentHpPercent = (humanoid.Health / humanoid.MaxHealth) * 100
 	end
 
-	-- Check if any slot has HP Hide active AND current HP % is <= slot threshold
-	local shouldHideHP = false
-	for _, data in ipairs(accessoryList) do
-		local threshold = data.hpThreshold or 100
-		if data.hideHp and (currentHpPercent <= threshold) then
-			shouldHideHP = true
-			break
-		end
-	end
-
-	-- Handle Humanoid Default HP display
-	if humanoid then
-		if shouldHideHP then
-			humanoid.HealthDisplayDistance = 0
-			humanoid.NameDisplayDistance = 0
-			humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-		else
-			humanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.Viewer
-		end
-	end
-
-	-- Handle custom overhead BillboardGuis/Health bars inside character
-	for _, child in ipairs(character:GetDescendants()) do
-		if child:IsA("BillboardGui") then
-			child.Enabled = not shouldHideHP
-		end
-	end
-
-	-- First Person Visibility Loop
 	for index, data in ipairs(accessoryList) do
-		if data.firstPersonVisible then
-			local accessory = character:FindFirstChild("CustomBody_" .. tostring(index))
-			if accessory then
-				for _, part in ipairs(accessory:GetDescendants()) do
-					if part:IsA("BasePart") then
+		local accessory = character:FindFirstChild("CustomBody_" .. tostring(index))
+		if accessory then
+			local threshold = data.hpThreshold or 100
+			local shouldHideForHP = data.hideHp and (currentHpPercent <= threshold)
+			
+			for _, part in ipairs(accessory:GetDescendants()) do
+				if part:IsA("BasePart") then
+					if shouldHideForHP then
+						-- Force full transparency when HP threshold is triggered
+						part.LocalTransparencyModifier = 1
+						part.Transparency = 1
+					elseif data.firstPersonVisible then
+						-- Keep visible in first person if toggle is active
 						part.LocalTransparencyModifier = 0
+					else
+						-- Default Roblox camera behavior
+						part.Transparency = 0
 					end
 				end
 			end
@@ -643,7 +625,6 @@ hpHideBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
--- HP Threshold Box
 local hpThreshLabel = Instance.new("TextLabel")
 hpThreshLabel.Size = UDim2.new(0, 80, 0, 22)
 hpThreshLabel.Position = UDim2.new(0, 155, 0, 262)
@@ -1038,4 +1019,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("Fookin hell")
+print("oi")
