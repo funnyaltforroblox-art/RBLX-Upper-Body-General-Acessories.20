@@ -676,15 +676,13 @@ hpThreshBox.Focused:Connect(function()
 end)
 
 local function commitHpThreshold()
-	local data = accessoryList[boundHpSlot]
+	local data = accessoryList[selectedIndex]
 	if data then
 		local num = tonumber(hpThreshBox.Text)
 		if num then
 			data.hpThreshold = math.clamp(num, 0, 100)
 		end
-		if selectedIndex == boundHpSlot then
-			hpThreshBox.Text = tostring(data.hpThreshold or 100)
-		end
+		hpThreshBox.Text = tostring(data.hpThreshold or 100)
 	end
 end
 
@@ -1055,4 +1053,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("Refactored The Blah Blah")
+print("Is it over")
