@@ -1316,4 +1316,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("We add colkind11aori)
+print("We add colkind11aori")
