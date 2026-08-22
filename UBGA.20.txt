@@ -162,6 +162,128 @@ local function clearPhysicalAccessories()
 	isExploded = false
 end
 
+local function buildExtractedAssetModel(data)
+	if not data or type(data.extractedVisuals) ~= "table" then return nil end
+
+	local model = Instance.new("Model")
+	local handle
+	local partsByName = {}
+
+	for partName, visualData in pairs(data.extractedVisuals) do
+		local part = Instance.new("Part")
+		part.Name = partName
+		part.Size = Vector3.new(visualData.sizeX or 1, visualData.sizeY or 1, visualData.sizeZ or 1)
+		part.Color = Color3.fromRGB(visualData.colorR or 255, visualData.colorG or 255, visualData.colorB or 255)
+		part.Material = Enum.Material.Plastic
+
+		local meshId = visualData.meshId or ""
+		local textureId = visualData.textureId or ""
+		if meshId ~= "" then
+			local mesh = Instance.new("SpecialMesh")
+			mesh.MeshType = Enum.MeshType.FileMesh
+			mesh.MeshId = meshId
+			mesh.TextureId = textureId
+			mesh.Scale = Vector3.new(1, 1, 1)
+			mesh.Parent = part
+		end
+
+		local relative = visualData.relativeCFrame
+		if type(relative) == "table" and #relative == 12 then
+			part.CFrame = CFrame.new(table.unpack(relative))
+		end
+
+		part.Parent = model
+		partsByName[partName] = part
+		if partName == "Handle" then handle = part end
+	end
+
+	handle = handle or model:FindFirstChildWhichIsA("BasePart")
+	if handle then handle.Name = "Handle" end
+	return model
+end
+
+local function extractCharacterAccessories()
+	local character = player.Character
+	if not character then return 0 end
+
+	local extractedCount = 0
+	for _, child in ipairs(character:GetChildren()) do
+		if child:IsA("Accessory") and string.sub(child.Name, 1, 11) ~= "CustomBody_" then
+			local handle = child:FindFirstChild("Handle") or child:FindFirstChildWhichIsA("BasePart", true)
+			if handle then
+				local partsData = {}
+				local visuals = {}
+				local partCounter = 1
+
+				for _, obj in ipairs(child:GetDescendants()) do
+					if obj:IsA("BasePart") then
+						local partName = obj == handle and "Handle" or obj.Name
+						if partName == "Part" or partName == "MeshPart" or partName == "" then
+							partName = "Component_" .. tostring(partCounter)
+							partCounter = partCounter + 1
+						end
+
+						local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
+						local meshId = mesh and mesh.MeshId or (obj:IsA("MeshPart") and obj.MeshId or "")
+						local textureId = mesh and mesh.TextureId or (obj:IsA("MeshPart") and obj.TextureID or "")
+						local scale = mesh and mesh.Scale or obj.Size
+						local relative = handle.CFrame:ToObjectSpace(obj.CFrame)
+						visuals[partName] = {
+							meshId = meshId,
+							textureId = textureId,
+							sizeX = obj.Size.X, sizeY = obj.Size.Y, sizeZ = obj.Size.Z,
+							colorR = math.floor(obj.Color.R * 255 + 0.5),
+							colorG = math.floor(obj.Color.G * 255 + 0.5),
+							colorB = math.floor(obj.Color.B * 255 + 0.5),
+							relativeCFrame = {relative:GetComponents()}
+						}
+						partsData[partName] = {
+							offsetX = 0, offsetY = 0, offsetZ = 0,
+							rotateX = 0, rotateY = 0, rotateZ = 0,
+							scaleX = scale.X, scaleY = scale.Y, scaleZ = scale.Z
+						}
+					end
+				end
+
+				if next(visuals) then
+					local rootRelative = CFrame.new()
+					local targetPart = "Head"
+					local bestLimb
+					for _, limbName in ipairs({"Head", "Torso", "Left Arm", "Right Arm"}) do
+						local limb = character:FindFirstChild(limbName)
+						if limb then
+							local rel = limb.CFrame:ToObjectSpace(handle.CFrame)
+							if not bestLimb or rel.Position.Magnitude < bestLimb.distance then
+								bestLimb = {name = limbName, cframe = rel, distance = rel.Position.Magnitude}
+							end
+						end
+					end
+					if bestLimb then targetPart = bestLimb.name; rootRelative = bestLimb.cframe end
+					local rx, ry, rz = rootRelative:ToEulerAnglesXYZ()
+					partsData.Handle.offsetX, partsData.Handle.offsetY, partsData.Handle.offsetZ = rootRelative.X, rootRelative.Y, rootRelative.Z
+					partsData.Handle.rotateX, partsData.Handle.rotateY, partsData.Handle.rotateZ = math.deg(rx), math.deg(ry), math.deg(rz)
+
+					table.insert(accessoryList, {
+						id = 0,
+						extracted = true,
+						extractedName = child.Name,
+						extractedVisuals = visuals,
+						targetPart = targetPart,
+						firstPersonVisible = false,
+						hideHp = false,
+						hpThreshold = 100,
+						useColor = false,
+						colorR = 255, colorG = 255, colorB = 255,
+						partsData = partsData
+					})
+					extractedCount = extractedCount + 1
+				end
+			end
+		end
+	end
+	return extractedCount
+end
+
 local function applyAllAccessories()
 	local character = player.Character
 	if not character then return end
@@ -175,9 +297,15 @@ local function applyAllAccessories()
 		sanitizeAccessoryData(data)
 		local limb = character:FindFirstChild(data.targetPart)
 		if limb then
-			local success, assetModel = pcall(function()
-				return game:GetObjects("rbxassetid://" .. data.id)[1]
-			end)
+			local success, assetModel
+			if data.extracted and data.extractedVisuals then
+				assetModel = buildExtractedAssetModel(data)
+				success = assetModel ~= nil
+			else
+				success, assetModel = pcall(function()
+					return game:GetObjects("rbxassetid://" .. data.id)[1]
+				end)
+			end
 			
 			if success and assetModel then
 				local handle = assetModel:FindFirstChild("Handle") or assetModel:FindFirstChildWhichIsA("Part", true) or assetModel:FindFirstChildWhichIsA("MeshPart", true)
@@ -1010,6 +1138,28 @@ updateSlotUI = function()
 		end)
 	end
 	
+	local extractBtn = Instance.new("TextButton")
+	extractBtn.Size = UDim2.new(1, 0, 0, 30)
+	extractBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 150)
+	extractBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+	extractBtn.Text = "EXTRACT CHARACTER ACCESSORIES"
+	extractBtn.Font = Enum.Font.SourceSansBold
+	extractBtn.Parent = slotPanel
+	extractBtn.MouseButton1Click:Connect(function()
+		extractBtn.Text = "EXTRACTING..."
+		local count = extractCharacterAccessories()
+		if count > 0 then
+			selectedIndex = #accessoryList
+			selectedSubPartName = "Handle"
+			updateSlotUI()
+			updateEditUI()
+			applyAllAccessories()
+		end
+		extractBtn.Text = "EXTRACTED (" .. tostring(count) .. ")"
+		task.wait(1)
+		extractBtn.Text = "EXTRACT CHARACTER ACCESSORIES"
+	end)
+
 	local addBtn = Instance.new("TextButton")
 	addBtn.Size = UDim2.new(1, 0, 0, 30)
 	addBtn.BackgroundColor3 = Color3.fromRGB(45, 85, 45)
@@ -1159,4 +1309,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("We added coloring")
+print("We added 119, 131, 191coloring")
