@@ -570,7 +570,8 @@ local slotPanel = Instance.new("ScrollingFrame")
 slotPanel.Size = UDim2.new(0, 180, 0, 345)
 slotPanel.Position = UDim2.new(0, 10, 0, 35)
 slotPanel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-slotPanel.CanvasSize = UDim2.new(0, 0, 2, 0)
+slotPanel.AutomaticCanvasSize = Enum.AutomaticSize.Y
+slotPanel.CanvasSize = UDim2.new(0, 0, 0, 0)
 slotPanel.Parent = frame
 
 local editPanelWrapper = Instance.new("Frame")
@@ -591,7 +592,8 @@ local presetPanel = Instance.new("ScrollingFrame")
 presetPanel.Size = UDim2.new(0, 180, 0, 305)
 presetPanel.Position = UDim2.new(0, 530, 0, 35)
 presetPanel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
-presetPanel.CanvasSize = UDim2.new(0, 0, 2, 0)
+presetPanel.AutomaticCanvasSize = Enum.AutomaticSize.Y
+presetPanel.CanvasSize = UDim2.new(0, 0, 0, 0)
 presetPanel.Parent = frame
 
 local updateSlotUI, updateEditUI, updatePresetUI
@@ -613,6 +615,8 @@ partDropdownScroll.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
 partDropdownScroll.BorderSizePixel = 1
 partDropdownScroll.ZIndex = 5
 partDropdownScroll.Visible = false
+partDropdownScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+partDropdownScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
 partDropdownScroll.Parent = editPanel
 
 partSelectBtn.MouseButton1Click:Connect(function()
@@ -652,7 +656,6 @@ local function updateSubPartDropdown()
 			highlightSelectedSubPart()
 		end)
 	end
-	partDropdownScroll.CanvasSize = UDim2.new(0, 0, 0, #sortedNames * 24)
 end
 
 local inputs = {}
@@ -1313,4 +1316,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("We added colkindaoring")
+print("We add colkind11aori)
