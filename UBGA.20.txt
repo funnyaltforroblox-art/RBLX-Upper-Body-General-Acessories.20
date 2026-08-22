@@ -259,8 +259,12 @@ local function extractCharacterAccessories()
 						end
 					end
 					if bestLimb then targetPart = bestLimb.name; rootRelative = bestLimb.cframe end
-					local rx, ry, rz = rootRelative:ToEulerAnglesXYZ()
-					partsData.Handle.offsetX, partsData.Handle.offsetY, partsData.Handle.offsetZ = rootRelative.X, rootRelative.Y, rootRelative.Z
+					-- Script 2's AccessoryWeld uses Part0 = Handle and Part1 = limb.
+					-- For that weld layout, C0 must be the inverse of the actual
+					-- limb -> handle transform in order to reproduce the extracted world position.
+					local weldRelative = rootRelative:Inverse()
+					local rx, ry, rz = weldRelative:ToEulerAnglesXYZ()
+					partsData.Handle.offsetX, partsData.Handle.offsetY, partsData.Handle.offsetZ = weldRelative.X, weldRelative.Y, weldRelative.Z
 					partsData.Handle.rotateX, partsData.Handle.rotateY, partsData.Handle.rotateZ = math.deg(rx), math.deg(ry), math.deg(rz)
 
 					table.insert(accessoryList, {
@@ -1309,4 +1313,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("Wedidnotcoloring")
+print("We added coloring")
