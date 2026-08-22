@@ -1,4 +1,4 @@
--- Upper Body Mesh & Model Customizer (R6 Wide Layout - Isolated Preset & HP Threshold Engine)
+-- Upper Body Mesh & Model Customizer (R6 Wide Layout - Isolated Preset & HP Threshold Engine with RGB Override)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -23,6 +23,10 @@ local accessoryList = {
 		firstPersonVisible = false,
 		hideHp = false,
 		hpThreshold = 100,
+		useColor = false,
+		colorR = 255,
+		colorG = 255,
+		colorB = 255,
 		partsData = {
 			["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
 		}
@@ -42,7 +46,12 @@ local function sanitizeAccessoryData(data)
 	if not data or type(data) ~= "table" then return end
 	if data.firstPersonVisible == nil then data.firstPersonVisible = false end
 	if data.hideHp == nil then data.hideHp = false end
+	if data.useColor == nil then data.useColor = false end
 	data.hpThreshold = tonumber(data.hpThreshold) or 100
+	data.colorR = tonumber(data.colorR) or 255
+	data.colorG = tonumber(data.colorG) or 255
+	data.colorB = tonumber(data.colorB) or 255
+	
 	if not data.partsData or type(data.partsData) ~= "table" then data.partsData = {} end
 	if not data.partsData["Handle"] then
 		data.partsData["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
@@ -197,11 +206,29 @@ local function applyAllAccessories()
 						end
 					end
 
+					-- Apply solid RGB Color & remove textures if feature is active
+					local customColor = Color3.fromRGB(data.colorR, data.colorG, data.colorB)
+
 					for _, obj in ipairs(assetModel:GetDescendants()) do
+						if data.useColor then
+							if obj:IsA("Texture") or obj:IsA("Decal") then
+								obj:Destroy()
+							elseif obj:IsA("MeshPart") then
+								obj.TextureID = ""
+							elseif obj:IsA("SpecialMesh") then
+								obj.TextureId = ""
+							end
+						end
+
 						if obj:IsA("BasePart") then
 							obj.Anchored = false
 							obj.CanCollide = false
 							obj.Massless = true
+							
+							if data.useColor then
+								obj.Color = customColor
+								obj.Material = Enum.Material.SmoothPlastic
+							end
 							
 							local pData = data.partsData[obj.Name]
 							if pData then
@@ -326,8 +353,8 @@ mainBtnCorner.CornerRadius = UDim.new(0, 8)
 mainBtnCorner.Parent = toggleBtn
 
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 720, 0, 350)
-frame.Position = UDim2.new(0.5, -360, 0.5, -175)
+frame.Size = UDim2.new(0, 720, 0, 390)
+frame.Position = UDim2.new(0.5, -360, 0.5, -195)
 frame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
 frame.BorderSizePixel = 2
 frame.Visible = true
@@ -408,28 +435,28 @@ task.spawn(function()
 end)
 
 local slotPanel = Instance.new("ScrollingFrame")
-slotPanel.Size = UDim2.new(0, 180, 0, 305)
+slotPanel.Size = UDim2.new(0, 180, 0, 345)
 slotPanel.Position = UDim2.new(0, 10, 0, 35)
 slotPanel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 slotPanel.CanvasSize = UDim2.new(0, 0, 2, 0)
 slotPanel.Parent = frame
 
 local editPanelWrapper = Instance.new("Frame")
-editPanelWrapper.Size = UDim2.new(0, 320, 0, 305)
+editPanelWrapper.Size = UDim2.new(0, 320, 0, 345)
 editPanelWrapper.Position = UDim2.new(0, 200, 0, 35)
 editPanelWrapper.BackgroundTransparency = 1
 editPanelWrapper.Parent = frame
 
 local editPanel = Instance.new("ScrollingFrame")
-editPanel.Size = UDim2.new(1, 0, 0, 260)
+editPanel.Size = UDim2.new(1, 0, 0, 300)
 editPanel.Position = UDim2.new(0, 0, 0, 0)
 editPanel.BackgroundTransparency = 1
-editPanel.CanvasSize = UDim2.new(0, 0, 0, 350)
+editPanel.CanvasSize = UDim2.new(0, 0, 0, 390)
 editPanel.ScrollBarThickness = 4
 editPanel.Parent = editPanelWrapper
 
 local presetPanel = Instance.new("ScrollingFrame")
-presetPanel.Size = UDim2.new(0, 180, 0, 265)
+presetPanel.Size = UDim2.new(0, 180, 0, 305)
 presetPanel.Position = UDim2.new(0, 530, 0, 35)
 presetPanel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 presetPanel.CanvasSize = UDim2.new(0, 0, 2, 0)
@@ -688,9 +715,71 @@ end
 
 hpThreshBox.FocusLost:Connect(commitHpThreshold)
 
+--- RGB Color UI Elements ---
+local useColorBtn = Instance.new("TextButton")
+useColorBtn.Size = UDim2.new(0, 145, 0, 22)
+useColorBtn.Position = UDim2.new(0, 0, 0, 262)
+useColorBtn.Font = Enum.Font.SourceSansBold
+useColorBtn.TextSize = 11
+useColorBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+useColorBtn.Text = "USE COLOR: OFF"
+useColorBtn.BackgroundColor3 = Color3.fromRGB(90, 40, 40)
+useColorBtn.Parent = editPanel
+
+useColorBtn.MouseButton1Click:Connect(function()
+	local data = accessoryList[selectedIndex]
+	if data then
+		data.useColor = not data.useColor
+		updateEditUI()
+	end
+end)
+
+local function createColorInput(cLabel, prop, x, y)
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(0, 15, 0, 22)
+	label.Position = UDim2.new(0, x, 0, y)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.fromRGB(200, 200, 200)
+	label.Text = cLabel
+	label.TextSize = 12
+	label.Parent = editPanel
+
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(0, 30, 0, 22)
+	box.Position = UDim2.new(0, x + 15, 0, y)
+	box.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	box.TextColor3 = Color3.fromRGB(255, 255, 255)
+	box.ClearTextOnFocus = false
+	box.TextSize = 12
+	box.Parent = editPanel
+
+	local boundSlot = 1
+	box.Focused:Connect(function() boundSlot = selectedIndex end)
+	box.FocusLost:Connect(function()
+		local data = accessoryList[boundSlot]
+		if data then
+			local val = tonumber(box.Text)
+			if val then data[prop] = math.clamp(math.floor(val), 0, 255) end
+			if selectedIndex == boundSlot then box.Text = tostring(data[prop] or 255) end
+		end
+	end)
+	return box
+end
+
+local rBox = createColorInput("R:", "colorR", 0, 290)
+local gBox = createColorInput("G:", "colorG", 50, 290)
+local bBox = createColorInput("B:", "colorB", 100, 290)
+
+local colorPreview = Instance.new("Frame")
+colorPreview.Size = UDim2.new(0, 145, 0, 15)
+colorPreview.Position = UDim2.new(0, 0, 0, 318)
+colorPreview.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+colorPreview.BorderSizePixel = 1
+colorPreview.Parent = editPanel
+
 local applyBtn = Instance.new("TextButton")
-applyBtn.Size = UDim2.new(0, 145, 0, 32)
-applyBtn.Position = UDim2.new(0, 0, 0, 262)
+applyBtn.Size = UDim2.new(0, 160, 0, 43)
+applyBtn.Position = UDim2.new(0, 155, 0, 290)
 applyBtn.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
 applyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 applyBtn.Text = "APPLY ALL"
@@ -704,7 +793,7 @@ end)
 
 local inspectBtn = Instance.new("TextButton")
 inspectBtn.Size = UDim2.new(0, 315, 0, 32)
-inspectBtn.Position = UDim2.new(0, 0, 0, 270)
+inspectBtn.Position = UDim2.new(0, 0, 0, 305)
 inspectBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
 inspectBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 inspectBtn.Text = "INSPECT INDIVIDUAL PARTS"
@@ -818,6 +907,19 @@ updateEditUI = function()
 	idBox.Text = tostring(data.id)
 	hpThreshBox.Text = tostring(data.hpThreshold or 100)
 
+	rBox.Text = tostring(data.colorR or 255)
+	gBox.Text = tostring(data.colorG or 255)
+	bBox.Text = tostring(data.colorB or 255)
+	colorPreview.BackgroundColor3 = Color3.fromRGB(data.colorR, data.colorG, data.colorB)
+
+	if data.useColor then
+		useColorBtn.Text = "USE COLOR: ON"
+		useColorBtn.BackgroundColor3 = Color3.fromRGB(40, 90, 40)
+	else
+		useColorBtn.Text = "USE COLOR: OFF"
+		useColorBtn.BackgroundColor3 = Color3.fromRGB(90, 40, 40)
+	end
+
 	if data.firstPersonVisible then
 		fpToggleBtn.Text = "FP: ON"
 		fpToggleBtn.BackgroundColor3 = Color3.fromRGB(40, 90, 40)
@@ -923,6 +1025,10 @@ updateSlotUI = function()
 			firstPersonVisible = false,
 			hideHp = false,
 			hpThreshold = 100,
+			useColor = false,
+			colorR = 255,
+			colorG = 255,
+			colorB = 255,
 			partsData = { ["Handle"] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1} }
 		})
 		selectedIndex = #accessoryList
@@ -936,7 +1042,7 @@ end
 
 local savePanel = Instance.new("Frame")
 savePanel.Size = UDim2.new(0, 180, 0, 35)
-savePanel.Position = UDim2.new(0, 530, 0, 305)
+savePanel.Position = UDim2.new(0, 530, 0, 345)
 savePanel.BackgroundTransparency = 1
 savePanel.Parent = frame
 
@@ -1053,4 +1159,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("Is it over")
+print("We added coloring")
