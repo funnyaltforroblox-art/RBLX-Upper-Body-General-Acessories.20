@@ -1313,4 +1313,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("We added coloring")
+print("We added colkindaoring")
