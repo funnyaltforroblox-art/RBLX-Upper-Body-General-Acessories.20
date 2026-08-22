@@ -1309,4 +1309,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("We added 119, 131, 191coloring")
+print("Wedidnotcoloring")
