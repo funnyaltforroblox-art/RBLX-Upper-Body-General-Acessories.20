@@ -246,7 +246,6 @@ local function isAlreadyExtracted(childName)
 	return false
 end
 
--- Extracts only Accessory instances on the character (never character body limbs/parts)
 local function extractCharacterAccessories()
 	local character = player.Character
 	if not character then return 0 end
@@ -255,7 +254,6 @@ local function extractCharacterAccessories()
 	for _, child in ipairs(character:GetChildren()) do
 		if child:IsA("Accessory") and string.sub(child.Name, 1, 11) ~= "CustomBody_" then
 			if isAlreadyExtracted(child.Name) then
-				child:Destroy()
 				continue
 			end
 
@@ -280,6 +278,7 @@ local function extractCharacterAccessories()
 						local relative = handle.CFrame:ToObjectSpace(obj.CFrame)
 
 						visuals[partName] = {
+							capturedExact = true,
 							className = obj.ClassName,
 							material = obj.Material.Name,
 							transparency = obj.Transparency,
@@ -292,7 +291,7 @@ local function extractCharacterAccessories()
 							colorB = math.floor(obj.Color.B * 255 + 0.5),
 							relativeCFrame = {relative:GetComponents()}
 						}
-						-- Scale multiplier (1 = exact extracted size/mesh scale)
+						-- User adjustment multiplier (1, 1, 1 = exact extracted proportions)
 						partsData[partName] = {
 							offsetX = 0, offsetY = 0, offsetZ = 0,
 							rotateX = 0, rotateY = 0, rotateZ = 0,
@@ -335,7 +334,6 @@ local function extractCharacterAccessories()
 						partsData = partsData
 					})
 					extractedCount = extractedCount + 1
-					child:Destroy()
 				end
 			end
 		end
@@ -434,20 +432,14 @@ local function applyAllAccessories()
 								local sz = tonumber(pData.scaleZ) or 1
 								local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
 
-								if data.extracted and vData then
+								if data.extracted and vData and vData.capturedExact then
 									local baseSize = Vector3.new(vData.sizeX or obj.Size.X, vData.sizeY or obj.Size.Y, vData.sizeZ or obj.Size.Z)
-									if vData.meshScaleX ~= nil then
-										local baseMeshScale = Vector3.new(vData.meshScaleX or 1, vData.meshScaleY or 1, vData.meshScaleZ or 1)
-										if mesh then
-											obj.Size = baseSize
-											mesh.Scale = Vector3.new(baseMeshScale.X * sx, baseMeshScale.Y * sy, baseMeshScale.Z * sz)
-										else
-											obj.Size = Vector3.new(baseSize.X * sx, baseSize.Y * sy, baseSize.Z * sz)
-										end
-									elseif mesh then
-										mesh.Scale = Vector3.new(sx, sy, sz)
+									local baseMeshScale = Vector3.new(vData.meshScaleX or 1, vData.meshScaleY or 1, vData.meshScaleZ or 1)
+									if mesh then
+										obj.Size = baseSize
+										mesh.Scale = Vector3.new(baseMeshScale.X * sx, baseMeshScale.Y * sy, baseMeshScale.Z * sz)
 									else
-										obj.Size = Vector3.new(sx, sy, sz)
+										obj.Size = Vector3.new(baseSize.X * sx, baseSize.Y * sy, baseSize.Z * sz)
 									end
 								elseif mesh then
 									mesh.Scale = Vector3.new(sx, sy, sz)
@@ -1402,4 +1394,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("Prepare for HSVING NO STORAGEEEi")
+print("Is it overM")
