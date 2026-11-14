@@ -243,17 +243,14 @@ local function extractCharacterAccessories()
 						local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
 						local meshId = mesh and mesh.MeshId or (obj:IsA("MeshPart") and obj.MeshId or "")
 						local textureId = mesh and mesh.TextureId or (obj:IsA("MeshPart") and obj.TextureID or "")
-						
-						-- Directly capture the current modified size & mesh scale from the character's accessory
-						local currentMeshScale = mesh and mesh.Scale or Vector3.new(1, 1, 1)
-						local editScale = mesh and mesh.Scale or obj.Size
+						local meshScale = mesh and mesh.Scale or Vector3.new(1, 1, 1)
 
 						local relative = handle.CFrame:ToObjectSpace(obj.CFrame)
 						visuals[partName] = {
 							meshId = meshId,
 							textureId = textureId,
 							sizeX = obj.Size.X, sizeY = obj.Size.Y, sizeZ = obj.Size.Z,
-							meshScaleX = currentMeshScale.X, meshScaleY = currentMeshScale.Y, meshScaleZ = currentMeshScale.Z,
+							meshScaleX = meshScale.X, meshScaleY = meshScale.Y, meshScaleZ = meshScale.Z,
 							colorR = math.floor(obj.Color.R * 255 + 0.5),
 							colorG = math.floor(obj.Color.G * 255 + 0.5),
 							colorB = math.floor(obj.Color.B * 255 + 0.5),
@@ -262,7 +259,7 @@ local function extractCharacterAccessories()
 						partsData[partName] = {
 							offsetX = 0, offsetY = 0, offsetZ = 0,
 							rotateX = 0, rotateY = 0, rotateZ = 0,
-							scaleX = editScale.X, scaleY = editScale.Y, scaleZ = editScale.Z
+							scaleX = 1, scaleY = 1, scaleZ = 1
 						}
 					end
 				end
@@ -394,13 +391,23 @@ local function applyAllAccessories()
 							end
 							
 							local pData = data.partsData[obj.Name]
+							local vData = data.extracted and data.extractedVisuals and data.extractedVisuals[obj.Name]
 							if pData then
-								local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
 								local sx = tonumber(pData.scaleX) or 1
 								local sy = tonumber(pData.scaleY) or 1
 								local sz = tonumber(pData.scaleZ) or 1
-								
-								if mesh then
+								local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
+
+								if data.extracted and vData then
+									local baseSize = Vector3.new(vData.sizeX or obj.Size.X, vData.sizeY or obj.Size.Y, vData.sizeZ or obj.Size.Z)
+									local baseMeshScale = Vector3.new(vData.meshScaleX or 1, vData.meshScaleY or 1, vData.meshScaleZ or 1)
+									if mesh then
+										obj.Size = baseSize
+										mesh.Scale = Vector3.new(baseMeshScale.X * sx, baseMeshScale.Y * sy, baseMeshScale.Z * sz)
+									else
+										obj.Size = Vector3.new(baseSize.X * sx, baseSize.Y * sy, baseSize.Z * sz)
+									end
+								elseif mesh then
 									mesh.Scale = Vector3.new(sx, sy, sz)
 								else
 									obj.Size = Vector3.new(sx, sy, sz)
@@ -1339,12 +1346,11 @@ updatePresetUI = function()
 	end
 end
 
--- If accessoryList has the default slot 1 item but character already has accessories, auto-extract the first time
 if #accessoryList == 1 and accessoryList[1].id == 17121838966 and player.Character then
 	task.spawn(function()
 		task.wait(0.5)
 		if extractCharacterAccessories() > 0 then
-			table.remove(accessoryList, 1) -- remove default slot 1 if user had an item equipped
+			table.remove(accessoryList, 1)
 			selectedIndex = 1
 			selectedSubPartName = "Handle"
 			updateSlotUI()
@@ -1368,4 +1374,4 @@ end)
 updateSlotUI()
 updateEditUI()
 updatePresetUI()
-print("We add colkind11aori")
+print("We add colkind11aonopemorebhgsri")
