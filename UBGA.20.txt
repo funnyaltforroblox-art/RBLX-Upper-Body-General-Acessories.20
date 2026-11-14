@@ -170,7 +170,6 @@ local function buildExtractedAssetModel(data)
 
 	local model = Instance.new("Model")
 	local handle
-	local partsByName = {}
 
 	for partName, visualData in pairs(data.extractedVisuals) do
 		local part = Instance.new("Part")
@@ -200,7 +199,6 @@ local function buildExtractedAssetModel(data)
 		end
 
 		part.Parent = model
-		partsByName[partName] = part
 		if partName == "Handle" then handle = part end
 	end
 
@@ -247,26 +245,24 @@ local function extractCharacterAccessories()
 						local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
 						local meshId = mesh and mesh.MeshId or (obj:IsA("MeshPart") and obj.MeshId or "")
 						local textureId = mesh and mesh.TextureId or (obj:IsA("MeshPart") and obj.TextureID or "")
-
-						-- Capture the actual modified Size and SpecialMesh.Scale so both are preserved
 						local meshScale = mesh and mesh.Scale or Vector3.new(1, 1, 1)
-						local editScale = mesh and mesh.Scale or obj.Size
 
 						local relative = handle.CFrame:ToObjectSpace(obj.CFrame)
 						visuals[partName] = {
 							meshId = meshId,
 							textureId = textureId,
 							sizeX = obj.Size.X, sizeY = obj.Size.Y, sizeZ = obj.Size.Z,
-							meshScaleX = meshScale.X, meshScaleY = meshScale.Y, meshScaleZ = meshScale.Z,
+							meshScaleX = meshScale.X, meshScaleY = meshScale.Y, meshScale.Z,
 							colorR = math.floor(obj.Color.R * 255 + 0.5),
 							colorG = math.floor(obj.Color.G * 255 + 0.5),
 							colorB = math.floor(obj.Color.B * 255 + 0.5),
 							relativeCFrame = {relative:GetComponents()}
 						}
+						-- Start scaleX/Y/Z at 1 so the part keeps its exact extracted modified size
 						partsData[partName] = {
 							offsetX = 0, offsetY = 0, offsetZ = 0,
 							rotateX = 0, rotateY = 0, rotateZ = 0,
-							scaleX = editScale.X, scaleY = editScale.Y, scaleZ = editScale.Z
+							scaleX = 1, scaleY = 1, scaleZ = 1
 						}
 					end
 				end
@@ -306,7 +302,6 @@ local function extractCharacterAccessories()
 					})
 					extractedCount = extractedCount + 1
 
-					-- Remove the raw character accessory so we don't keep both the original and the CustomBody clone
 					child:Destroy()
 				end
 			end
@@ -402,30 +397,20 @@ local function applyAllAccessories()
 							local vData = data.extracted and data.extractedVisuals and data.extractedVisuals[obj.Name]
 							if pData then
 								local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
+								local mult = Vector3.new(pData.scaleX or 1, pData.scaleY or 1, pData.scaleZ or 1)
 								if data.extracted and vData then
-									-- Preserve the extracted part's modified Size while applying custom scale changes
 									local baseSize = Vector3.new(vData.sizeX or obj.Size.X, vData.sizeY or obj.Size.Y, vData.sizeZ or obj.Size.Z)
-									local baseScale = Vector3.new(vData.meshScaleX or 1, vData.meshScaleY or 1, vData.meshScaleZ or 1)
-									local targetScale = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
+									local baseMeshScale = Vector3.new(vData.meshScaleX or 1, vData.meshScaleY or 1, vData.meshScaleZ or 1)
 									if mesh then
 										obj.Size = baseSize
-										mesh.Scale = targetScale
+										mesh.Scale = Vector3.new(baseMeshScale.X * mult.X, baseMeshScale.Y * mult.Y, baseMeshScale.Z * mult.Z)
 									else
-										local sizeRatio = Vector3.new(
-											baseSize.X ~= 0 and (targetScale.X / baseSize.X) or 1,
-											baseSize.Y ~= 0 and (targetScale.Y / baseSize.Y) or 1,
-											baseSize.Z ~= 0 and (targetScale.Z / baseSize.Z) or 1
-										)
-										obj.Size = Vector3.new(
-											baseSize.X * sizeRatio.X,
-											baseSize.Y * sizeRatio.Y,
-											baseSize.Z * sizeRatio.Z
-										)
+										obj.Size = Vector3.new(baseSize.X * mult.X, baseSize.Y * mult.Y, baseSize.Z * mult.Z)
 									end
 								elseif mesh then
-									mesh.Scale = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
+									mesh.Scale = mult
 								else
-									obj.Size = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
+									obj.Size = mult
 								end
 							end
 						elseif obj:IsA("Weld") or obj:IsA("ManualWeld") or obj:IsA("WeldConstraint") or obj:IsA("Attachment") then
@@ -1374,4 +1359,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("We add colkind11aori")
+print("We add colkinupdate1aori")
