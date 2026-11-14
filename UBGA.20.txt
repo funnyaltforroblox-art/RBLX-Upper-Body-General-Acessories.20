@@ -175,7 +175,6 @@ local function buildExtractedAssetModel(data)
 
 	local model = Instance.new("Model")
 	local handle
-	local partsByName = {}
 
 	for partName, visualData in pairs(data.extractedVisuals) do
 		local part
@@ -228,22 +227,12 @@ local function buildExtractedAssetModel(data)
 		end
 
 		part.Parent = model
-		partsByName[partName] = part
 		if partName == "Handle" then handle = part end
 	end
 
 	handle = handle or model:FindFirstChildWhichIsA("BasePart")
 	if handle then handle.Name = "Handle" end
 	return model
-end
-
-local function isAlreadyExtracted(childName)
-	for _, existing in ipairs(accessoryList) do
-		if existing.extracted and existing.extractedName == childName then
-			return true
-		end
-	end
-	return false
 end
 
 local function extractCharacterAccessories()
@@ -253,10 +242,6 @@ local function extractCharacterAccessories()
 	local extractedCount = 0
 	for _, child in ipairs(character:GetChildren()) do
 		if child:IsA("Accessory") and string.sub(child.Name, 1, 11) ~= "CustomBody_" then
-			if isAlreadyExtracted(child.Name) then
-				continue
-			end
-
 			local handle = child:FindFirstChild("Handle") or child:FindFirstChildWhichIsA("BasePart", true)
 			if handle then
 				local partsData = {}
@@ -275,10 +260,10 @@ local function extractCharacterAccessories()
 						local meshId = mesh and mesh.MeshId or (obj:IsA("MeshPart") and obj.MeshId or "")
 						local textureId = mesh and mesh.TextureId or (obj:IsA("MeshPart") and obj.TextureID or "")
 						local meshScale = mesh and mesh.Scale or Vector3.new(1, 1, 1)
+						local displayScale = mesh and mesh.Scale or obj.Size
 						local relative = handle.CFrame:ToObjectSpace(obj.CFrame)
 
 						visuals[partName] = {
-							capturedExact = true,
 							className = obj.ClassName,
 							material = obj.Material.Name,
 							transparency = obj.Transparency,
@@ -291,11 +276,13 @@ local function extractCharacterAccessories()
 							colorB = math.floor(obj.Color.B * 255 + 0.5),
 							relativeCFrame = {relative:GetComponents()}
 						}
-						-- User adjustment multiplier (1, 1, 1 = exact extracted proportions)
+
 						partsData[partName] = {
 							offsetX = 0, offsetY = 0, offsetZ = 0,
 							rotateX = 0, rotateY = 0, rotateZ = 0,
-							scaleX = 1, scaleY = 1, scaleZ = 1
+							scaleX = displayScale.X,
+							scaleY = displayScale.Y,
+							scaleZ = displayScale.Z
 						}
 					end
 				end
@@ -425,23 +412,12 @@ local function applyAllAccessories()
 							end
 							
 							local pData = data.partsData[obj.Name]
-							local vData = data.extracted and data.extractedVisuals and data.extractedVisuals[obj.Name]
 							if pData then
 								local sx = tonumber(pData.scaleX) or 1
 								local sy = tonumber(pData.scaleY) or 1
 								local sz = tonumber(pData.scaleZ) or 1
 								local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
-
-								if data.extracted and vData and vData.capturedExact then
-									local baseSize = Vector3.new(vData.sizeX or obj.Size.X, vData.sizeY or obj.Size.Y, vData.sizeZ or obj.Size.Z)
-									local baseMeshScale = Vector3.new(vData.meshScaleX or 1, vData.meshScaleY or 1, vData.meshScaleZ or 1)
-									if mesh then
-										obj.Size = baseSize
-										mesh.Scale = Vector3.new(baseMeshScale.X * sx, baseMeshScale.Y * sy, baseMeshScale.Z * sz)
-									else
-										obj.Size = Vector3.new(baseSize.X * sx, baseSize.Y * sy, baseSize.Z * sz)
-									end
-								elseif mesh then
+								if mesh then
 									mesh.Scale = Vector3.new(sx, sy, sz)
 								else
 									obj.Size = Vector3.new(sx, sy, sz)
@@ -1394,4 +1370,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("Is it overM")
+print("WPLEASEEE PLEAAEEEEri")
