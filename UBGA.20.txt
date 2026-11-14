@@ -186,7 +186,11 @@ local function buildExtractedAssetModel(data)
 			mesh.MeshType = Enum.MeshType.FileMesh
 			mesh.MeshId = meshId
 			mesh.TextureId = textureId
-			mesh.Scale = Vector3.new(1, 1, 1)
+			mesh.Scale = Vector3.new(
+				visualData.meshScaleX or 1,
+				visualData.meshScaleY or 1,
+				visualData.meshScaleZ or 1
+			)
 			mesh.Parent = part
 		end
 
@@ -244,21 +248,16 @@ local function extractCharacterAccessories()
 						local meshId = mesh and mesh.MeshId or (obj:IsA("MeshPart") and obj.MeshId or "")
 						local textureId = mesh and mesh.TextureId or (obj:IsA("MeshPart") and obj.TextureID or "")
 
-						-- MeshPart.Size is in world studs, not a SpecialMesh scale multiplier
-						local scale
-						if mesh then
-							scale = mesh.Scale
-						elseif obj:IsA("MeshPart") then
-							scale = Vector3.new(1, 1, 1)
-						else
-							scale = obj.Size
-						end
+						-- Capture the actual modified Size and SpecialMesh.Scale so both are preserved
+						local meshScale = mesh and mesh.Scale or Vector3.new(1, 1, 1)
+						local editScale = mesh and mesh.Scale or obj.Size
 
 						local relative = handle.CFrame:ToObjectSpace(obj.CFrame)
 						visuals[partName] = {
 							meshId = meshId,
 							textureId = textureId,
 							sizeX = obj.Size.X, sizeY = obj.Size.Y, sizeZ = obj.Size.Z,
+							meshScaleX = meshScale.X, meshScaleY = meshScale.Y, meshScaleZ = meshScale.Z,
 							colorR = math.floor(obj.Color.R * 255 + 0.5),
 							colorG = math.floor(obj.Color.G * 255 + 0.5),
 							colorB = math.floor(obj.Color.B * 255 + 0.5),
@@ -267,7 +266,7 @@ local function extractCharacterAccessories()
 						partsData[partName] = {
 							offsetX = 0, offsetY = 0, offsetZ = 0,
 							rotateX = 0, rotateY = 0, rotateZ = 0,
-							scaleX = scale.X, scaleY = scale.Y, scaleZ = scale.Z
+							scaleX = editScale.X, scaleY = editScale.Y, scaleZ = editScale.Z
 						}
 					end
 				end
@@ -400,9 +399,30 @@ local function applyAllAccessories()
 							end
 							
 							local pData = data.partsData[obj.Name]
+							local vData = data.extracted and data.extractedVisuals and data.extractedVisuals[obj.Name]
 							if pData then
 								local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
-								if mesh then
+								if data.extracted and vData then
+									-- Preserve the extracted part's modified Size while applying custom scale changes
+									local baseSize = Vector3.new(vData.sizeX or obj.Size.X, vData.sizeY or obj.Size.Y, vData.sizeZ or obj.Size.Z)
+									local baseScale = Vector3.new(vData.meshScaleX or 1, vData.meshScaleY or 1, vData.meshScaleZ or 1)
+									local targetScale = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
+									if mesh then
+										obj.Size = baseSize
+										mesh.Scale = targetScale
+									else
+										local sizeRatio = Vector3.new(
+											baseSize.X ~= 0 and (targetScale.X / baseSize.X) or 1,
+											baseSize.Y ~= 0 and (targetScale.Y / baseSize.Y) or 1,
+											baseSize.Z ~= 0 and (targetScale.Z / baseSize.Z) or 1
+										)
+										obj.Size = Vector3.new(
+											baseSize.X * sizeRatio.X,
+											baseSize.Y * sizeRatio.Y,
+											baseSize.Z * sizeRatio.Z
+										)
+									end
+								elseif mesh then
 									mesh.Scale = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
 								else
 									obj.Size = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
@@ -1354,4 +1374,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("We add colkind1PLEASEEEE1aori")
+print("We add colkind11aori")
