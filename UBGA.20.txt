@@ -1,4 +1,4 @@
--- Upper Body Mesh & Model Customizer (R6 Wide Layout - Isolated Preset & HP Threshold Engine with RGB Override + 3D Gizmo Engine)
+-- Upper Body Mesh & Model Customizer (R6 Wide Layout - Isolated Preset & HP Threshold Engine with RGB Override)
 repeat task.wait() until game:IsLoaded()
 
 local Players = game:GetService("Players")
@@ -43,15 +43,6 @@ local EXPLODE_DISTANCE = 4.0
 local currentHighlightBox = nil
 local applyGeneration = 0
 
--- Gizmo Engine State
-local gizmoMode = "Move" -- "Move" | "Rotate" | "Scale"
-local gizmoEnabled = true
-local isGizmoDragging = false
-local gizmoSnapshot = nil
-local gizmoFolder = Instance.new("Folder")
-gizmoFolder.Name = "Customizer_GizmoEngine"
-gizmoFolder.Parent = workspace
-
 local function normalizeAssetUri(rawId)
 	if type(rawId) ~= "string" and type(rawId) ~= "number" then return "" end
 	local str = tostring(rawId)
@@ -60,74 +51,6 @@ local function normalizeAssetUri(rawId)
 		return "rbxassetid://" .. str
 	end
 	return str
-end
-
-local function extractNumericIdsFromString(str)
-	local ids = {}
-	if type(str) ~= "string" then return ids end
-	for idMatch in string.gmatch(str, "(%d+)") do
-		table.insert(ids, idMatch)
-	end
-	return ids
-end
-
-local function copyToClipboardSafe(text)
-	local clipFn = setclipboard or toclipboard or (syn and syn.write_clipboard)
-	if type(clipFn) == "function" then
-		local ok = pcall(clipFn, text)
-		return ok
-	end
-	return false
-end
-
-local function grabCharacterAccessoryIdsToClipboard()
-	local character = player.Character
-	if not character then return 0, false end
-
-	local collected = {}
-	local seen = {}
-
-	local function addId(val)
-		if val == nil then return end
-		for _, numId in ipairs(extractNumericIdsFromString(tostring(val))) do
-			if numId ~= "0" and not seen[numId] then
-				seen[numId] = true
-				table.insert(collected, numId)
-			end
-		end
-	end
-
-	for _, child in ipairs(character:GetChildren()) do
-		if child:IsA("Accessory") and string.sub(child.Name, 1, 11) ~= "CustomBody_" then
-			-- Check common attributes or properties if present
-			pcall(function()
-				if child:GetAttribute("AssetId") then addId(child:GetAttribute("AssetId")) end
-				if child:GetAttribute("Id") then addId(child:GetAttribute("Id")) end
-			end)
-			pcall(function()
-				if (child :: any).AssetId then addId((child :: any).AssetId) end
-			end)
-
-			for _, desc in ipairs(child:GetDescendants()) do
-				if desc:IsA("SpecialMesh") then
-					addId(desc.MeshId)
-					addId(desc.TextureId)
-				elseif desc:IsA("MeshPart") then
-					addId(desc.MeshId)
-					addId(desc.TextureID)
-				elseif desc:IsA("Decal") or desc:IsA("Texture") then
-					addId(desc.Texture)
-				end
-			end
-		end
-	end
-
-	if #collected > 0 then
-		local formatted = table.concat(collected, ", ")
-		local copied = copyToClipboardSafe(formatted)
-		return #collected, copied
-	end
-	return 0, false
 end
 
 local function sanitizePresetName(rawName)
@@ -178,60 +101,6 @@ local function findPhysicalPartInCharacter(slotIndex, partName)
 	return nil
 end
 
-local function applyPartScaleVisual(part, sx, sy, sz)
-	if not part or not part:IsA("BasePart") then return end
-	local mesh = part:FindFirstChildWhichIsA("SpecialMesh")
-	if mesh then
-		mesh.Scale = Vector3.new(sx, sy, sz)
-	else
-		part.Size = Vector3.new(sx, sy, sz)
-	end
-end
-
-local function syncLivePartTransform(slotIndex, partName)
-	local data = accessoryList[slotIndex]
-	if not data or not data.partsData or not data.partsData[partName] then return end
-	local pData = data.partsData[partName]
-	local character = player.Character
-	if not character then return end
-
-	local targetPart = findPhysicalPartInCharacter(slotIndex, partName)
-	if not targetPart then return end
-
-	applyPartScaleVisual(
-		targetPart,
-		tonumber(pData.scaleX) or 1,
-		tonumber(pData.scaleY) or 1,
-		tonumber(pData.scaleZ) or 1
-	)
-
-	local posOffset = CFrame.new(tonumber(pData.offsetX) or 0, tonumber(pData.offsetY) or 0, tonumber(pData.offsetZ) or 0)
-	local rotOffset = CFrame.Angles(
-		math.rad(tonumber(pData.rotateX) or 0),
-		math.rad(tonumber(pData.rotateY) or 0),
-		math.rad(tonumber(pData.rotateZ) or 0)
-	)
-
-	if partName == "Handle" then
-		local weld = targetPart:FindFirstChild("AccessoryWeld")
-		if weld and weld:IsA("Weld") then
-			weld.C0 = posOffset * rotOffset
-		end
-	else
-		local accessory = character:FindFirstChild("CustomBody_" .. tostring(slotIndex))
-		local handle = accessory and accessory:FindFirstChild("Handle")
-		local innerWeld = targetPart:FindFirstChild("ModelInnerWeld")
-		if handle and innerWeld and innerWeld:IsA("Weld") then
-			-- Recompute structural offset from current relative placement if possible
-			local rel = handle.CFrame:ToObjectSpace(targetPart.CFrame)
-			innerWeld.C0 = rel:Inverse() * (posOffset * rotOffset)
-		end
-	end
-end
-
--- Forward declarations for UI updaters
-local updateSlotUI, updateEditUI, updatePresetUI, updateGizmoVisuals
-
 local function highlightSelectedSubPart()
 	clearActiveHighlight()
 	local targetPartInstance = findPhysicalPartInCharacter(selectedIndex, selectedSubPartName)
@@ -243,9 +112,6 @@ local function highlightSelectedSubPart()
 		selectionBox.Adornee = targetPartInstance
 		selectionBox.Parent = targetPartInstance
 		currentHighlightBox = selectionBox
-	end
-	if updateGizmoVisuals then
-		updateGizmoVisuals()
 	end
 end
 
@@ -394,6 +260,7 @@ local function buildExtractedAssetModel(data)
 	return model
 end
 
+-- Extraction system modeled after PerhapsheDOESknow.txt (clones, strips welds/attachments, captures exact visual & scale data)
 local function extractCharacterAccessories()
 	local character = player.Character
 	if not character then return 0 end
@@ -586,7 +453,12 @@ local function applyAllAccessories()
 								local sx = tonumber(pData.scaleX) or 1
 								local sy = tonumber(pData.scaleY) or 1
 								local sz = tonumber(pData.scaleZ) or 1
-								applyPartScaleVisual(obj, sx, sy, sz)
+								local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
+								if mesh then
+									mesh.Scale = Vector3.new(sx, sy, sz)
+								else
+									obj.Size = Vector3.new(sx, sy, sz)
+								end
 							end
 						elseif obj:IsA("Weld") or obj:IsA("ManualWeld") or obj:IsA("WeldConstraint") or obj:IsA("Attachment") then
 							obj:Destroy()
@@ -747,7 +619,7 @@ local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 30)
 title.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
 title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Text = "Sub-Part Model Customizer Engine (Universal Patch + 3D Gizmo)"
+title.Text = "Sub-Part Model Customizer Engine (Universal Patch)"
 title.Font = Enum.Font.SourceSansBold
 title.TextSize = 15
 title.Parent = frame
@@ -812,6 +684,8 @@ presetPanel.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 presetPanel.AutomaticCanvasSize = Enum.AutomaticSize.Y
 presetPanel.CanvasSize = UDim2.new(0, 0, 0, 0)
 presetPanel.Parent = frame
+
+local updateSlotUI, updateEditUI, updatePresetUI
 
 local partSelectBtn = Instance.new("TextButton")
 partSelectBtn.Size = UDim2.new(0, 305, 0, 26)
@@ -908,8 +782,6 @@ local function createEditInput(labelName, property, x, y)
 			local numValue = tonumber(box.Text)
 			if numValue then
 				data.partsData[boundSubPart][property] = numValue
-				syncLivePartTransform(boundSlot, boundSubPart)
-				if updateGizmoVisuals then updateGizmoVisuals() end
 			end
 			if selectedIndex == boundSlot and selectedSubPartName == boundSubPart then
 				box.Text = tostring(data.partsData[boundSubPart][property] or 0)
@@ -1309,7 +1181,6 @@ updateEditUI = function()
 		end
 	end
 	updateSubPartDropdown()
-	if updateGizmoVisuals then updateGizmoVisuals() end
 end
 
 updateSlotUI = function()
@@ -1371,11 +1242,9 @@ updateSlotUI = function()
 	extractBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 	extractBtn.Text = "EXTRACT CHARACTER ACCESSORIES"
 	extractBtn.Font = Enum.Font.SourceSansBold
-	extractBtn.TextSize = 11
 	extractBtn.Parent = slotPanel
 	extractBtn.MouseButton1Click:Connect(function()
-		extractBtn.Text = "EXTRACTING & COPYING..."
-		local idCount, copiedOk = grabCharacterAccessoryIdsToClipboard()
+		extractBtn.Text = "EXTRACTING..."
 		local count = extractCharacterAccessories()
 		if count > 0 then
 			selectedIndex = #accessoryList
@@ -1384,14 +1253,8 @@ updateSlotUI = function()
 			updateEditUI()
 			applyAllAccessories()
 		end
-		if idCount > 0 and copiedOk then
-			extractBtn.Text = "COPIED " .. tostring(idCount) .. " IDs (" .. tostring(count) .. ")"
-		elseif idCount > 0 then
-			extractBtn.Text = "FOUND " .. tostring(idCount) .. " IDs (NO CLIP)"
-		else
-			extractBtn.Text = "EXTRACTED (" .. tostring(count) .. ")"
-		end
-		task.wait(1.5)
+		extractBtn.Text = "EXTRACTED (" .. tostring(count) .. ")"
+		task.wait(1)
 		extractBtn.Text = "EXTRACT CHARACTER ACCESSORIES"
 	end)
 
@@ -1425,243 +1288,6 @@ updateSlotUI = function()
 	end)
 end
 
--- =========================================================================
--- 3D GIZMO TRANSFORM ENGINE (Move / Rotate / Scale PerAxis + Cancel / Apply)
--- =========================================================================
-local moveHandles = Instance.new("Handles")
-moveHandles.Name = "GizmoMoveHandles"
-moveHandles.Style = Enum.HandlesStyle.Movement
-moveHandles.Parent = gizmoFolder
-
-local rotateArcs = Instance.new("ArcHandles")
-rotateArcs.Name = "GizmoRotateArcs"
-rotateArcs.Parent = gizmoFolder
-
-local scaleHandles = Instance.new("Handles")
-scaleHandles.Name = "GizmoScaleHandles"
-scaleHandles.Style = Enum.HandlesStyle.Resize
-scaleHandles.Color3 = Color3.fromRGB(40, 140, 255)
-scaleHandles.Parent = gizmoFolder
-
--- Floating Gizmo Toolbar matching the video layout
-local gizmoHud = Instance.new("Frame")
-gizmoHud.Name = "GizmoFloatingHUD"
-gizmoHud.Size = UDim2.new(0, 260, 0, 128)
-gizmoHud.Position = UDim2.new(0.5, -130, 1, -142)
-gizmoHud.BackgroundTransparency = 1
-gizmoHud.Parent = sgui
-
-local cancelBtn = Instance.new("TextButton")
-cancelBtn.Size = UDim2.new(0, 124, 0, 34)
-cancelBtn.Position = UDim2.new(0, 2, 0, 0)
-cancelBtn.BackgroundColor3 = Color3.fromRGB(215, 55, 65)
-cancelBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-cancelBtn.Text = "Cancel"
-cancelBtn.Font = Enum.Font.SourceSansBold
-cancelBtn.TextSize = 16
-cancelBtn.Parent = gizmoHud
-Instance.new("UICorner", cancelBtn).CornerRadius = UDim.new(0, 8)
-
-local applyGizmoBtn = Instance.new("TextButton")
-applyGizmoBtn.Size = UDim2.new(0, 124, 0, 34)
-applyGizmoBtn.Position = UDim2.new(0, 134, 0, 0)
-applyGizmoBtn.BackgroundColor3 = Color3.fromRGB(65, 200, 105)
-applyGizmoBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-applyGizmoBtn.Text = "Apply"
-applyGizmoBtn.Font = Enum.Font.SourceSansBold
-applyGizmoBtn.TextSize = 16
-applyGizmoBtn.Parent = gizmoHud
-Instance.new("UICorner", applyGizmoBtn).CornerRadius = UDim.new(0, 8)
-
-local toolDock = Instance.new("Frame")
-toolDock.Size = UDim2.new(0, 256, 0, 62)
-toolDock.Position = UDim2.new(0, 2, 0, 40)
-toolDock.BackgroundColor3 = Color3.fromRGB(28, 28, 30)
-toolDock.BorderSizePixel = 0
-toolDock.Parent = gizmoHud
-Instance.new("UICorner", toolDock).CornerRadius = UDim.new(0, 10)
-
-local function makeToolBtn(label, xPos, modeName)
-	local b = Instance.new("TextButton")
-	b.Size = UDim2.new(0, 74, 0, 50)
-	b.Position = UDim2.new(0, xPos, 0, 6)
-	b.BackgroundColor3 = Color3.fromRGB(42, 42, 46)
-	b.TextColor3 = Color3.fromRGB(255, 255, 255)
-	b.Text = label
-	b.Font = Enum.Font.SourceSansBold
-	b.TextSize = 13
-	b.Parent = toolDock
-	Instance.new("UICorner", b).CornerRadius = UDim.new(0, 8)
-	b.MouseButton1Click:Connect(function()
-		gizmoMode = modeName
-		updateGizmoVisuals()
-	end)
-	return b
-end
-
-local rotToolBtn = makeToolBtn("Rotate", 8, "Rotate")
-local moveToolBtn = makeToolBtn("Move", 91, "Move")
-local scaleToolBtn = makeToolBtn("Scale", 174, "Scale")
-
-local stepPill = Instance.new("TextLabel")
-stepPill.Size = UDim2.new(0, 124, 0, 20)
-stepPill.Position = UDim2.new(0, 68, 0, 106)
-stepPill.BackgroundColor3 = Color3.fromRGB(24, 24, 26)
-stepPill.TextColor3 = Color3.fromRGB(235, 235, 240)
-stepPill.Text = "0.001 studs"
-stepPill.Font = Enum.Font.SourceSansBold
-stepPill.TextSize = 12
-stepPill.Parent = gizmoHud
-Instance.new("UICorner", stepPill).CornerRadius = UDim.new(0, 6)
-
-local function captureGizmoSnapshot()
-	local data = accessoryList[selectedIndex]
-	if not data or not data.partsData or not data.partsData[selectedSubPartName] then
-		gizmoSnapshot = nil
-		return
-	end
-	local p = data.partsData[selectedSubPartName]
-	gizmoSnapshot = {
-		slot = selectedIndex,
-		partName = selectedSubPartName,
-		offsetX = p.offsetX, offsetY = p.offsetY, offsetZ = p.offsetZ,
-		rotateX = p.rotateX, rotateY = p.rotateY, rotateZ = p.rotateZ,
-		scaleX = p.scaleX, scaleY = p.scaleY, scaleZ = p.scaleZ,
-	}
-end
-
-updateGizmoVisuals = function()
-	local adorneePart = findPhysicalPartInCharacter(selectedIndex, selectedSubPartName)
-	local active = gizmoEnabled and (adorneePart ~= nil)
-
-	moveHandles.Adornee = (active and gizmoMode == "Move") and adorneePart or nil
-	rotateArcs.Adornee = (active and gizmoMode == "Rotate") and adorneePart or nil
-	scaleHandles.Adornee = (active and gizmoMode == "Scale") and adorneePart or nil
-
-	moveToolBtn.BackgroundColor3 = (gizmoMode == "Move") and Color3.fromRGB(0, 120, 215) or Color3.fromRGB(42, 42, 46)
-	rotToolBtn.BackgroundColor3 = (gizmoMode == "Rotate") and Color3.fromRGB(0, 120, 215) or Color3.fromRGB(42, 42, 46)
-	scaleToolBtn.BackgroundColor3 = (gizmoMode == "Scale") and Color3.fromRGB(0, 120, 215) or Color3.fromRGB(42, 42, 46)
-
-	if gizmoMode == "Rotate" then
-		stepPill.Text = "0.001 degrees"
-	elseif gizmoMode == "Scale" then
-		stepPill.Text = "Scale: PerAxis"
-	else
-		stepPill.Text = "0.001 studs"
-	end
-end
-
-local dragStartData = nil
-
-local function onGizmoBegin()
-	isGizmoDragging = true
-	if not gizmoSnapshot then
-		captureGizmoSnapshot()
-	end
-	local data = accessoryList[selectedIndex]
-	local p = data and data.partsData and data.partsData[selectedSubPartName]
-	if p then
-		dragStartData = {
-			offsetX = p.offsetX, offsetY = p.offsetY, offsetZ = p.offsetZ,
-			rotateX = p.rotateX, rotateY = p.rotateY, rotateZ = p.rotateZ,
-			scaleX = p.scaleX, scaleY = p.scaleY, scaleZ = p.scaleZ,
-		}
-	end
-end
-
-local function onGizmoEnd()
-	isGizmoDragging = false
-	dragStartData = nil
-	if updateEditUI then
-		updateEditUI()
-	end
-end
-
-moveHandles.MouseButton1Down:Connect(onGizmoBegin)
-moveHandles.MouseButton1Up:Connect(onGizmoEnd)
-moveHandles.MouseDrag:Connect(function(axis, distance)
-	if not dragStartData then return end
-	local data = accessoryList[selectedIndex]
-	local p = data and data.partsData and data.partsData[selectedSubPartName]
-	if not p then return end
-
-	local snapped = math.floor((distance / 0.001) + 0.5) * 0.001
-	local normal = Vector3.fromNormalId(axis)
-	p.offsetX = dragStartData.offsetX + normal.X * snapped
-	p.offsetY = dragStartData.offsetY + normal.Y * snapped
-	p.offsetZ = dragStartData.offsetZ + normal.Z * snapped
-
-	inputs.offsetX.Text = string.format("%.3f", p.offsetX)
-	inputs.offsetY.Text = string.format("%.3f", p.offsetY)
-	inputs.offsetZ.Text = string.format("%.3f", p.offsetZ)
-	syncLivePartTransform(selectedIndex, selectedSubPartName)
-end)
-
-rotateArcs.MouseButton1Down:Connect(onGizmoBegin)
-rotateArcs.MouseButton1Up:Connect(onGizmoEnd)
-rotateArcs.MouseDrag:Connect(function(axis, relativeAngle)
-	if not dragStartData then return end
-	local data = accessoryList[selectedIndex]
-	local p = data and data.partsData and data.partsData[selectedSubPartName]
-	if not p then return end
-
-	local deg = math.deg(relativeAngle)
-	local snappedDeg = math.floor((deg / 0.001) + 0.5) * 0.001
-	local normal = Vector3.fromNormalId(axis)
-	p.rotateX = dragStartData.rotateX + normal.X * snappedDeg
-	p.rotateY = dragStartData.rotateY + normal.Y * snappedDeg
-	p.rotateZ = dragStartData.rotateZ + normal.Z * snappedDeg
-
-	inputs.rotateX.Text = string.format("%.3f", p.rotateX)
-	inputs.rotateY.Text = string.format("%.3f", p.rotateY)
-	inputs.rotateZ.Text = string.format("%.3f", p.rotateZ)
-	syncLivePartTransform(selectedIndex, selectedSubPartName)
-end)
-
-scaleHandles.MouseButton1Down:Connect(onGizmoBegin)
-scaleHandles.MouseButton1Up:Connect(onGizmoEnd)
-scaleHandles.MouseDrag:Connect(function(axis, distance)
-	if not dragStartData then return end
-	local data = accessoryList[selectedIndex]
-	local p = data and data.partsData and data.partsData[selectedSubPartName]
-	if not p then return end
-
-	local snapped = math.floor((distance / 0.001) + 0.5) * 0.001
-	local normal = Vector3.fromNormalId(axis)
-	p.scaleX = math.max(0.001, dragStartData.scaleX + normal.X * snapped)
-	p.scaleY = math.max(0.001, dragStartData.scaleY + normal.Y * snapped)
-	p.scaleZ = math.max(0.001, dragStartData.scaleZ + normal.Z * snapped)
-
-	inputs.scaleX.Text = string.format("%.3f", p.scaleX)
-	inputs.scaleY.Text = string.format("%.3f", p.scaleY)
-	inputs.scaleZ.Text = string.format("%.3f", p.scaleZ)
-	syncLivePartTransform(selectedIndex, selectedSubPartName)
-end)
-
-cancelBtn.MouseButton1Click:Connect(function()
-	if gizmoSnapshot then
-		local data = accessoryList[gizmoSnapshot.slot]
-		local p = data and data.partsData and data.partsData[gizmoSnapshot.partName]
-		if p then
-			p.offsetX, p.offsetY, p.offsetZ = gizmoSnapshot.offsetX, gizmoSnapshot.offsetY, gizmoSnapshot.offsetZ
-			p.rotateX, p.rotateY, p.rotateZ = gizmoSnapshot.rotateX, gizmoSnapshot.rotateY, gizmoSnapshot.rotateZ
-			p.scaleX, p.scaleY, p.scaleZ = gizmoSnapshot.scaleX, gizmoSnapshot.scaleY, gizmoSnapshot.scaleZ
-			syncLivePartTransform(gizmoSnapshot.slot, gizmoSnapshot.partName)
-		end
-		gizmoSnapshot = nil
-		updateEditUI()
-	end
-end)
-
-applyGizmoBtn.MouseButton1Click:Connect(function()
-	gizmoSnapshot = nil
-	commitHpThreshold()
-	applyAllAccessories()
-end)
-
--- =========================================================================
--- PRESET SAVE / LOAD SYSTEM
--- =========================================================================
 local savePanel = Instance.new("Frame")
 savePanel.Size = UDim2.new(0, 180, 0, 35)
 savePanel.Position = UDim2.new(0, 530, 0, 345)
@@ -1781,4 +1407,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("We add colkind11aori + 3D Gizmo Engine")
+print("We add colkind11aori")
