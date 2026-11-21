@@ -16,34 +16,6 @@ if HAS_FILESYSTEM then
 	pcall(function() makefolder(FOLDER_NAME) end)
 end
 
-local function cleanR6QualityName(nameStr)
-	if type(nameStr) ~= "string" then return nameStr end
-	-- Removes "R6QualityVisual" (case-insensitive) along with optional surrounding separators/spaces
-	local cleaned = nameStr:gsub("%s*[%-%_:]?%s*[Rr]6[Qq]uality[Vv]isual%s*[%-%_:]?%s*", " ")
-	cleaned = cleaned:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", " ")
-	return cleaned
-end
-
-local function stripR6QualityVisual(root)
-	if not root then return end
-	if root.Name and string.lower(root.Name) == "r6qualityvisual" then
-		root:Destroy()
-		return
-	end
-	if root.Name then
-		root.Name = cleanR6QualityName(root.Name)
-	end
-	for _, desc in ipairs(root:GetDescendants()) do
-		if desc.Parent then
-			if desc.Name and string.lower(desc.Name) == "r6qualityvisual" then
-				desc:Destroy()
-			elseif desc.Name then
-				desc.Name = cleanR6QualityName(desc.Name)
-			end
-		end
-	end
-end
-
 local accessoryList = {
 	{
 		id = 17121838966, 
@@ -72,9 +44,6 @@ local currentHighlightBox = nil
 
 local function sanitizeAccessoryData(data)
 	if not data or type(data) ~= "table" then return end
-	if data.extractedName then
-		data.extractedName = cleanR6QualityName(data.extractedName)
-	end
 	if data.firstPersonVisible == nil then data.firstPersonVisible = false end
 	if data.hideHp == nil then data.hideHp = false end
 	if data.useColor == nil then data.useColor = false end
@@ -139,9 +108,6 @@ local function scanAssetAndPopulateData(slotIndex)
 	end)
 	
 	if success and assetModel then
-		stripR6QualityVisual(assetModel)
-		if not assetModel.Parent then return end
-
 		local handle = assetModel:FindFirstChild("Handle") or assetModel:FindFirstChildWhichIsA("Part", true) or assetModel:FindFirstChildWhichIsA("MeshPart", true)
 		if not handle and assetModel:IsA("Model") and assetModel.PrimaryPart then
 			handle = assetModel.PrimaryPart
@@ -199,40 +165,40 @@ end
 local function buildExtractedAssetModel(data)
 	if not data or type(data.extractedVisuals) ~= "table" then return nil end
 
-	local visualData = data.extractedVisuals["Handle"]
-	if not visualData then
-		for _, v in pairs(data.extractedVisuals) do
-			visualData = v
-			break
-		end
-	end
-	if not visualData then return nil end
-
 	local model = Instance.new("Model")
-	local handle = Instance.new("Part")
-	handle.Name = "Handle"
-	handle.Size = Vector3.new(visualData.sizeX or 1, visualData.sizeY or 1, visualData.sizeZ or 1)
-	handle.Color = Color3.fromRGB(visualData.colorR or 255, visualData.colorG or 255, visualData.colorB or 255)
-	handle.Material = Enum.Material.Plastic
+	local handle
+	local partsByName = {}
 
-	local meshId = visualData.meshId or ""
-	local textureId = visualData.textureId or ""
-	if meshId ~= "" then
-		local mesh = Instance.new("SpecialMesh")
-		mesh.MeshType = Enum.MeshType.FileMesh
-		mesh.MeshId = meshId
-		mesh.TextureId = textureId
-		mesh.Scale = Vector3.new(1, 1, 1)
-		mesh.Parent = handle
+	for partName, visualData in pairs(data.extractedVisuals) do
+		local part = Instance.new("Part")
+		part.Name = partName
+		part.Size = Vector3.new(visualData.sizeX or 1, visualData.sizeY or 1, visualData.sizeZ or 1)
+		part.Color = Color3.fromRGB(visualData.colorR or 255, visualData.colorG or 255, visualData.colorB or 255)
+		part.Material = Enum.Material.Plastic
+
+		local meshId = visualData.meshId or ""
+		local textureId = visualData.textureId or ""
+		if meshId ~= "" then
+			local mesh = Instance.new("SpecialMesh")
+			mesh.MeshType = Enum.MeshType.FileMesh
+			mesh.MeshId = meshId
+			mesh.TextureId = textureId
+			mesh.Scale = Vector3.new(1, 1, 1)
+			mesh.Parent = part
+		end
+
+		local relative = visualData.relativeCFrame
+		if type(relative) == "table" and #relative == 12 then
+			part.CFrame = CFrame.new(table.unpack(relative))
+		end
+
+		part.Parent = model
+		partsByName[partName] = part
+		if partName == "Handle" then handle = part end
 	end
 
-	local relative = visualData.relativeCFrame
-	if type(relative) == "table" and #relative == 12 then
-		handle.CFrame = CFrame.new(table.unpack(relative))
-	end
-
-	handle.Parent = model
-	model.PrimaryPart = handle
+	handle = handle or model:FindFirstChildWhichIsA("BasePart")
+	if handle then handle.Name = "Handle" end
 	return model
 end
 
@@ -243,36 +209,43 @@ local function extractCharacterAccessories()
 	local extractedCount = 0
 	for _, child in ipairs(character:GetChildren()) do
 		if child:IsA("Accessory") and string.sub(child.Name, 1, 11) ~= "CustomBody_" then
-			stripR6QualityVisual(child)
-			if child.Parent then
-				local handle = child:FindFirstChild("Handle") or child:FindFirstChildWhichIsA("BasePart", true)
-				if handle and string.lower(handle.Name) ~= "r6qualityvisual" then
-					local mesh = handle:FindFirstChildWhichIsA("SpecialMesh")
-					local meshId = mesh and mesh.MeshId or (handle:IsA("MeshPart") and handle.MeshId or "")
-					local textureId = mesh and mesh.TextureId or (handle:IsA("MeshPart") and handle.TextureID or "")
-					local scale = mesh and mesh.Scale or handle.Size
+			local handle = child:FindFirstChild("Handle") or child:FindFirstChildWhichIsA("BasePart", true)
+			if handle then
+				local partsData = {}
+				local visuals = {}
+				local partCounter = 1
 
-					-- Only store the Handle part
-					local visuals = {
-						["Handle"] = {
+				for _, obj in ipairs(child:GetDescendants()) do
+					if obj:IsA("BasePart") then
+						local partName = obj == handle and "Handle" or obj.Name
+						if partName == "Part" or partName == "MeshPart" or partName == "" then
+							partName = "Component_" .. tostring(partCounter)
+							partCounter = partCounter + 1
+						end
+
+						local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
+						local meshId = mesh and mesh.MeshId or (obj:IsA("MeshPart") and obj.MeshId or "")
+						local textureId = mesh and mesh.TextureId or (obj:IsA("MeshPart") and obj.TextureID or "")
+						local scale = mesh and mesh.Scale or obj.Size
+						local relative = handle.CFrame:ToObjectSpace(obj.CFrame)
+						visuals[partName] = {
 							meshId = meshId,
 							textureId = textureId,
-							sizeX = handle.Size.X, sizeY = handle.Size.Y, sizeZ = handle.Size.Z,
-							colorR = math.floor(handle.Color.R * 255 + 0.5),
-							colorG = math.floor(handle.Color.G * 255 + 0.5),
-							colorB = math.floor(handle.Color.B * 255 + 0.5),
-							relativeCFrame = {CFrame.new():GetComponents()}
+							sizeX = obj.Size.X, sizeY = obj.Size.Y, sizeZ = obj.Size.Z,
+							colorR = math.floor(obj.Color.R * 255 + 0.5),
+							colorG = math.floor(obj.Color.G * 255 + 0.5),
+							colorB = math.floor(obj.Color.B * 255 + 0.5),
+							relativeCFrame = {relative:GetComponents()}
 						}
-					}
-
-					local partsData = {
-						["Handle"] = {
+						partsData[partName] = {
 							offsetX = 0, offsetY = 0, offsetZ = 0,
 							rotateX = 0, rotateY = 0, rotateZ = 0,
 							scaleX = scale.X, scaleY = scale.Y, scaleZ = scale.Z
 						}
-					}
+					end
+				end
 
+				if next(visuals) then
 					local rootRelative = CFrame.new()
 					local targetPart = "Head"
 					local bestLimb
@@ -286,7 +259,9 @@ local function extractCharacterAccessories()
 						end
 					end
 					if bestLimb then targetPart = bestLimb.name; rootRelative = bestLimb.cframe end
-
+					-- Script 2's AccessoryWeld uses Part0 = Handle and Part1 = limb.
+					-- For that weld layout, C0 must be the inverse of the actual
+					-- limb -> handle transform in order to reproduce the extracted world position.
 					local weldRelative = rootRelative:Inverse()
 					local rx, ry, rz = weldRelative:ToEulerAnglesXYZ()
 					partsData.Handle.offsetX, partsData.Handle.offsetY, partsData.Handle.offsetZ = weldRelative.X, weldRelative.Y, weldRelative.Z
@@ -295,7 +270,7 @@ local function extractCharacterAccessories()
 					table.insert(accessoryList, {
 						id = 0,
 						extracted = true,
-						extractedName = cleanR6QualityName(child.Name),
+						extractedName = child.Name,
 						extractedVisuals = visuals,
 						targetPart = targetPart,
 						firstPersonVisible = false,
@@ -337,116 +312,113 @@ local function applyAllAccessories()
 			end
 			
 			if success and assetModel then
-				stripR6QualityVisual(assetModel)
-				if assetModel.Parent then
-					local handle = assetModel:FindFirstChild("Handle") or assetModel:FindFirstChildWhichIsA("Part", true) or assetModel:FindFirstChildWhichIsA("MeshPart", true)
-					if not handle and assetModel:IsA("Model") and assetModel.PrimaryPart then
-						handle = assetModel.PrimaryPart
+				local handle = assetModel:FindFirstChild("Handle") or assetModel:FindFirstChildWhichIsA("Part", true) or assetModel:FindFirstChildWhichIsA("MeshPart", true)
+				if not handle and assetModel:IsA("Model") and assetModel.PrimaryPart then
+					handle = assetModel.PrimaryPart
+				end
+				
+				if handle then
+					handle.Name = "Handle"
+					
+					local structuralOffsets = {}
+					local partCounter = 1
+					
+					for _, obj in ipairs(assetModel:GetDescendants()) do
+						if obj:IsA("BasePart") and obj ~= handle then
+							if obj.Name == "Part" or obj.Name == "MeshPart" or obj.Name == "" then
+								obj.Name = "Component_" .. tostring(partCounter)
+								partCounter = partCounter + 1
+							end
+							
+							structuralOffsets[obj.Name] = handle.CFrame:ToObjectSpace(obj.CFrame)
+							
+							if not data.partsData[obj.Name] then
+								data.partsData[obj.Name] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
+							end
+						end
+					end
+
+					-- Apply solid RGB Color & remove textures if feature is active
+					local customColor = Color3.fromRGB(data.colorR, data.colorG, data.colorB)
+
+					for _, obj in ipairs(assetModel:GetDescendants()) do
+						if data.useColor then
+							if obj:IsA("Texture") or obj:IsA("Decal") then
+								obj:Destroy()
+							elseif obj:IsA("MeshPart") then
+								obj.TextureID = ""
+							elseif obj:IsA("SpecialMesh") then
+								obj.TextureId = ""
+							end
+						end
+
+						if obj:IsA("BasePart") then
+							obj.Anchored = false
+							obj.CanCollide = false
+							obj.Massless = true
+							
+							if data.useColor then
+								obj.Color = customColor
+								obj.Material = Enum.Material.SmoothPlastic
+							end
+							
+							local pData = data.partsData[obj.Name]
+							if pData then
+								local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
+								if mesh then
+									mesh.Scale = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
+								else
+									obj.Size = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
+								end
+							end
+						elseif obj:IsA("Weld") or obj:IsA("ManualWeld") or obj:IsA("WeldConstraint") or obj:IsA("Attachment") then
+							obj:Destroy()
+						end
 					end
 					
-					if handle then
-						handle.Name = "Handle"
-						
-						local structuralOffsets = {}
-						local partCounter = 1
-						
+					local accessory = Instance.new("Accessory")
+					accessory.Name = "CustomBody_" .. tostring(index)
+					
+					if assetModel:IsA("Model") then
 						for _, obj in ipairs(assetModel:GetDescendants()) do
 							if obj:IsA("BasePart") and obj ~= handle then
-								if obj.Name == "Part" or obj.Name == "MeshPart" or obj.Name == "" then
-									obj.Name = "Component_" .. tostring(partCounter)
-									partCounter = partCounter + 1
-								end
+								local pData = data.partsData[obj.Name] or {offsetX=0,offsetY=0,offsetZ=0,rotateX=0,rotateY=0,rotateZ=0}
+								local innerWeld = Instance.new("Weld")
+								innerWeld.Name = "ModelInnerWeld"
+								innerWeld.Part0 = obj
+								innerWeld.Part1 = handle
 								
-								structuralOffsets[obj.Name] = handle.CFrame:ToObjectSpace(obj.CFrame)
+								local originalLocalCFrame = structuralOffsets[obj.Name] or CFrame.new()
+								local customPosOffset = CFrame.new(pData.offsetX, pData.offsetY, pData.offsetZ)
+								local customRotOffset = CFrame.Angles(math.rad(pData.rotateX), math.rad(pData.rotateY), math.rad(pData.rotateZ))
 								
-								if not data.partsData[obj.Name] then
-									data.partsData[obj.Name] = {offsetX = 0, offsetY = 0, offsetZ = 0, rotateX = 0, rotateY = 0, rotateZ = 0, scaleX = 1, scaleY = 1, scaleZ = 1}
-								end
+								innerWeld.C0 = originalLocalCFrame:Inverse() * (customPosOffset * customRotOffset)
+								innerWeld.Parent = obj
 							end
 						end
-
-						-- Apply solid RGB Color & remove textures if feature is active
-						local customColor = Color3.fromRGB(data.colorR, data.colorG, data.colorB)
-
-						for _, obj in ipairs(assetModel:GetDescendants()) do
-							if data.useColor then
-								if obj:IsA("Texture") or obj:IsA("Decal") then
-									obj:Destroy()
-								elseif obj:IsA("MeshPart") then
-									obj.TextureID = ""
-								elseif obj:IsA("SpecialMesh") then
-									obj.TextureId = ""
-								end
-							end
-
-							if obj:IsA("BasePart") then
-								obj.Anchored = false
-								obj.CanCollide = false
-								obj.Massless = true
-								
-								if data.useColor then
-									obj.Color = customColor
-									obj.Material = Enum.Material.SmoothPlastic
-								end
-								
-								local pData = data.partsData[obj.Name]
-								if pData then
-									local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
-									if mesh then
-										mesh.Scale = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
-									else
-										obj.Size = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
-									end
-								end
-							elseif obj:IsA("Weld") or obj:IsA("ManualWeld") or obj:IsA("WeldConstraint") or obj:IsA("Attachment") then
-								obj:Destroy()
+						for _, obj in ipairs(assetModel:GetChildren()) do
+							if obj:IsA("BasePart") or obj:IsA("Folder") or obj:IsA("Configuration") then
+								obj.Parent = accessory
 							end
 						end
-						
-						local accessory = Instance.new("Accessory")
-						accessory.Name = "CustomBody_" .. tostring(index)
-						
-						if assetModel:IsA("Model") then
-							for _, obj in ipairs(assetModel:GetDescendants()) do
-								if obj:IsA("BasePart") and obj ~= handle then
-									local pData = data.partsData[obj.Name] or {offsetX=0,offsetY=0,offsetZ=0,rotateX=0,rotateY=0,rotateZ=0}
-									local innerWeld = Instance.new("Weld")
-									innerWeld.Name = "ModelInnerWeld"
-									innerWeld.Part0 = obj
-									innerWeld.Part1 = handle
-									
-									local originalLocalCFrame = structuralOffsets[obj.Name] or CFrame.new()
-									local customPosOffset = CFrame.new(pData.offsetX, pData.offsetY, pData.offsetZ)
-									local customRotOffset = CFrame.Angles(math.rad(pData.rotateX), math.rad(pData.rotateY), math.rad(pData.rotateZ))
-									
-									innerWeld.C0 = originalLocalCFrame:Inverse() * (customPosOffset * customRotOffset)
-									innerWeld.Parent = obj
-								end
-							end
-							for _, obj in ipairs(assetModel:GetChildren()) do
-								if obj:IsA("BasePart") or obj:IsA("Folder") or obj:IsA("Configuration") then
-									obj.Parent = accessory
-								end
-							end
-							assetModel:Destroy()
-						else
-							handle.Parent = accessory
-						end
-						
-						local rootData = data.partsData["Handle"] or {offsetX=0, offsetY=0, offsetZ=0, rotateX=0, rotateY=0, rotateZ=0}
-						local weld = Instance.new("Weld")
-						weld.Name = "AccessoryWeld"
-						weld.Part0 = handle
-						weld.Part1 = limb
-						
-						local positionOffset = CFrame.new(rootData.offsetX, rootData.offsetY, rootData.offsetZ)
-						local rotationOffset = CFrame.Angles(math.rad(rootData.rotateX), math.rad(rootData.rotateY), math.rad(rootData.rotateZ))
-						
-						weld.C0 = positionOffset * rotationOffset
-						weld.Parent = handle
-						
-						accessory.Parent = character
+						assetModel:Destroy()
+					else
+						handle.Parent = accessory
 					end
+					
+					local rootData = data.partsData["Handle"] or {offsetX=0, offsetY=0, offsetZ=0, rotateX=0, rotateY=0, rotateZ=0}
+					local weld = Instance.new("Weld")
+					weld.Name = "AccessoryWeld"
+					weld.Part0 = handle
+					weld.Part1 = limb
+					
+					local positionOffset = CFrame.new(rootData.offsetX, rootData.offsetY, rootData.offsetZ)
+					local rotationOffset = CFrame.Angles(math.rad(rootData.rotateX), math.rad(rootData.rotateY), math.rad(rootData.rotateZ))
+					
+					weld.C0 = positionOffset * rotationOffset
+					weld.Parent = handle
+					
+					accessory.Parent = character
 				end
 			end
 		end
@@ -1344,4 +1316,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("We WE FEXTRUDEr99UPDATED THE PROBLEMMMMMM!!!!ri")
+print("FINE, ILL DO IT MYSELF.")
