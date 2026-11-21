@@ -41,24 +41,6 @@ local originalAnchoredStates = {}
 local activeTweens = {}
 local EXPLODE_DISTANCE = 4.0 
 local currentHighlightBox = nil
-local applyGeneration = 0
-
-local function normalizeAssetUri(rawId)
-	if type(rawId) ~= "string" and type(rawId) ~= "number" then return "" end
-	local str = tostring(rawId)
-	if str == "" then return "" end
-	if string.match(str, "^%d+$") then
-		return "rbxassetid://" .. str
-	end
-	return str
-end
-
-local function sanitizePresetName(rawName)
-	if type(rawName) ~= "string" then return "" end
-	local cleaned = string.gsub(rawName, "[\\/:*?\"<>|]", "_")
-	cleaned = string.match(cleaned, "^%s*(.-)%s*$") or ""
-	return cleaned
-end
 
 local function sanitizeAccessoryData(data)
 	if not data or type(data) ~= "table" then return end
@@ -117,7 +99,7 @@ end
 
 local function scanAssetAndPopulateData(slotIndex)
 	local data = accessoryList[slotIndex]
-	if not data or not data.id or data.extracted then return end
+	if not data or not data.id then return end
 	
 	sanitizeAccessoryData(data)
 	
@@ -185,74 +167,34 @@ local function buildExtractedAssetModel(data)
 
 	local model = Instance.new("Model")
 	local handle
+	local partsByName = {}
 
 	for partName, visualData in pairs(data.extractedVisuals) do
-		if type(visualData) == "table" then
-			local part
-			local meshId = normalizeAssetUri(visualData.meshId or visualData.MeshId)
-			local textureId = normalizeAssetUri(visualData.textureId or visualData.TextureId)
-			local sizeX = tonumber(visualData.sizeX or visualData.SizeX) or 1
-			local sizeY = tonumber(visualData.sizeY or visualData.SizeY) or 1
-			local sizeZ = tonumber(visualData.sizeZ or visualData.SizeZ) or 1
+		local part = Instance.new("Part")
+		part.Name = partName
+		part.Size = Vector3.new(visualData.sizeX or 1, visualData.sizeY or 1, visualData.sizeZ or 1)
+		part.Color = Color3.fromRGB(visualData.colorR or 255, visualData.colorG or 255, visualData.colorB or 255)
+		part.Material = Enum.Material.Plastic
 
-			if visualData.className == "MeshPart" and meshId ~= "" then
-				local ok, mp = pcall(function()
-					local created = Instance.new("MeshPart")
-					created.MeshId = meshId
-					return created
-				end)
-				part = (ok and mp) or Instance.new("Part")
-			else
-				part = Instance.new("Part")
-			end
-
-			part.Name = partName
-			part.Size = Vector3.new(sizeX, sizeY, sizeZ)
-			part.Transparency = tonumber(visualData.transparency or visualData.Transparency) or 0
-			part.Reflectance = tonumber(visualData.reflectance or visualData.Reflectance) or 0
-
-			if visualData.colorR and visualData.colorG and visualData.colorB then
-				if visualData.colorNormalized then
-					part.Color = Color3.new(visualData.colorR, visualData.colorG, visualData.colorB)
-				else
-					part.Color = Color3.fromRGB(visualData.colorR, visualData.colorG, visualData.colorB)
-				end
-			end
-
-			local mat = visualData.material or visualData.Material
-			if type(mat) == "string" then
-				mat = string.gsub(mat, "^Enum%.Material%.", "")
-				local matOk, matEnum = pcall(function() return Enum.Material[mat] end)
-				if matOk and matEnum then
-					part.Material = matEnum
-				end
-			end
-
-			if part:IsA("MeshPart") then
-				if textureId ~= "" then
-					pcall(function() part.TextureID = textureId end)
-				end
-			elseif meshId ~= "" then
-				local mesh = Instance.new("SpecialMesh")
-				mesh.MeshType = Enum.MeshType.FileMesh
-				mesh.MeshId = meshId
-				mesh.TextureId = textureId
-				mesh.Scale = Vector3.new(
-					tonumber(visualData.meshScaleX) or 1,
-					tonumber(visualData.meshScaleY) or 1,
-					tonumber(visualData.meshScaleZ) or 1
-				)
-				mesh.Parent = part
-			end
-
-			local relative = visualData.relativeCFrame
-			if type(relative) == "table" and #relative == 12 then
-				part.CFrame = CFrame.new(table.unpack(relative))
-			end
-
-			part.Parent = model
-			if partName == "Handle" then handle = part end
+		local meshId = visualData.meshId or ""
+		local textureId = visualData.textureId or ""
+		if meshId ~= "" then
+			local mesh = Instance.new("SpecialMesh")
+			mesh.MeshType = Enum.MeshType.FileMesh
+			mesh.MeshId = meshId
+			mesh.TextureId = textureId
+			mesh.Scale = Vector3.new(1, 1, 1)
+			mesh.Parent = part
 		end
+
+		local relative = visualData.relativeCFrame
+		if type(relative) == "table" and #relative == 12 then
+			part.CFrame = CFrame.new(table.unpack(relative))
+		end
+
+		part.Parent = model
+		partsByName[partName] = part
+		if partName == "Handle" then handle = part end
 	end
 
 	handle = handle or model:FindFirstChildWhichIsA("BasePart")
@@ -260,7 +202,6 @@ local function buildExtractedAssetModel(data)
 	return model
 end
 
--- Extraction system modeled after PerhapsheDOESknow.txt (clones, strips welds/attachments, captures exact visual & scale data)
 local function extractCharacterAccessories()
 	local character = player.Character
 	if not character then return 0 end
@@ -269,19 +210,12 @@ local function extractCharacterAccessories()
 	for _, child in ipairs(character:GetChildren()) do
 		if child:IsA("Accessory") and string.sub(child.Name, 1, 11) ~= "CustomBody_" then
 			local handle = child:FindFirstChild("Handle") or child:FindFirstChildWhichIsA("BasePart", true)
-			if handle and handle:IsA("BasePart") then
-				local cloneCopy = child:Clone()
-				for _, subItem in ipairs(cloneCopy:GetDescendants()) do
-					if subItem:IsA("Weld") or subItem:IsA("ManualWeld") or subItem:IsA("WeldConstraint") or subItem:IsA("Attachment") or subItem:IsA("RigidConstraint") then
-						subItem:Destroy()
-					end
-				end
-
+			if handle then
 				local partsData = {}
 				local visuals = {}
 				local partCounter = 1
 
-				for _, obj in ipairs(cloneCopy:GetDescendants()) do
+				for _, obj in ipairs(child:GetDescendants()) do
 					if obj:IsA("BasePart") then
 						local partName = obj == handle and "Handle" or obj.Name
 						if partName == "Part" or partName == "MeshPart" or partName == "" then
@@ -289,40 +223,27 @@ local function extractCharacterAccessories()
 							partCounter = partCounter + 1
 						end
 
-						local pMesh = obj:FindFirstChildWhichIsA("SpecialMesh")
-						local meshId = pMesh and pMesh.MeshId or (obj:IsA("MeshPart") and obj.MeshId or "")
-						local textureId = pMesh and pMesh.TextureId or (obj:IsA("MeshPart") and obj.TextureID or "")
-						local meshScale = pMesh and pMesh.Scale or Vector3.new(1, 1, 1)
-						local displayScale = pMesh and pMesh.Scale or obj.Size
+						local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
+						local meshId = mesh and mesh.MeshId or (obj:IsA("MeshPart") and obj.MeshId or "")
+						local textureId = mesh and mesh.TextureId or (obj:IsA("MeshPart") and obj.TextureID or "")
+						local scale = mesh and mesh.Scale or obj.Size
 						local relative = handle.CFrame:ToObjectSpace(obj.CFrame)
-
 						visuals[partName] = {
-							className = obj.ClassName,
-							material = tostring(obj.Material),
-							transparency = obj.Transparency,
-							reflectance = obj.Reflectance,
 							meshId = meshId,
 							textureId = textureId,
 							sizeX = obj.Size.X, sizeY = obj.Size.Y, sizeZ = obj.Size.Z,
-							meshScaleX = meshScale.X, meshScaleY = meshScale.Y, meshScaleZ = meshScale.Z,
-							colorR = obj.Color.R,
-							colorG = obj.Color.G,
-							colorB = obj.Color.B,
-							colorNormalized = true,
+							colorR = math.floor(obj.Color.R * 255 + 0.5),
+							colorG = math.floor(obj.Color.G * 255 + 0.5),
+							colorB = math.floor(obj.Color.B * 255 + 0.5),
 							relativeCFrame = {relative:GetComponents()}
 						}
-
 						partsData[partName] = {
 							offsetX = 0, offsetY = 0, offsetZ = 0,
 							rotateX = 0, rotateY = 0, rotateZ = 0,
-							scaleX = displayScale.X,
-							scaleY = displayScale.Y,
-							scaleZ = displayScale.Z
+							scaleX = scale.X, scaleY = scale.Y, scaleZ = scale.Z
 						}
 					end
 				end
-
-				cloneCopy:Destroy()
 
 				if next(visuals) then
 					local rootRelative = CFrame.new()
@@ -338,7 +259,9 @@ local function extractCharacterAccessories()
 						end
 					end
 					if bestLimb then targetPart = bestLimb.name; rootRelative = bestLimb.cframe end
-
+					-- Script 2's AccessoryWeld uses Part0 = Handle and Part1 = limb.
+					-- For that weld layout, C0 must be the inverse of the actual
+					-- limb -> handle transform in order to reproduce the extracted world position.
 					local weldRelative = rootRelative:Inverse()
 					local rx, ry, rz = weldRelative:ToEulerAnglesXYZ()
 					partsData.Handle.offsetX, partsData.Handle.offsetY, partsData.Handle.offsetZ = weldRelative.X, weldRelative.Y, weldRelative.Z
@@ -366,20 +289,15 @@ local function extractCharacterAccessories()
 end
 
 local function applyAllAccessories()
-	applyGeneration += 1
-	local myGeneration = applyGeneration
-
 	local character = player.Character
 	if not character then return end
 	
 	local humanoid = character:WaitForChild("Humanoid", 5)
-	if myGeneration ~= applyGeneration then return end
 	if not humanoid or humanoid.RigType ~= Enum.HumanoidRigType.R6 then return end
 	
 	clearPhysicalAccessories()
 	
 	for index, data in ipairs(accessoryList) do
-		if myGeneration ~= applyGeneration then return end
 		sanitizeAccessoryData(data)
 		local limb = character:FindFirstChild(data.targetPart)
 		if limb then
@@ -391,11 +309,6 @@ local function applyAllAccessories()
 				success, assetModel = pcall(function()
 					return game:GetObjects("rbxassetid://" .. data.id)[1]
 				end)
-			end
-
-			if myGeneration ~= applyGeneration then
-				if assetModel then assetModel:Destroy() end
-				return
 			end
 			
 			if success and assetModel then
@@ -425,6 +338,7 @@ local function applyAllAccessories()
 						end
 					end
 
+					-- Apply solid RGB Color & remove textures if feature is active
 					local customColor = Color3.fromRGB(data.colorR, data.colorG, data.colorB)
 
 					for _, obj in ipairs(assetModel:GetDescendants()) do
@@ -450,14 +364,11 @@ local function applyAllAccessories()
 							
 							local pData = data.partsData[obj.Name]
 							if pData then
-								local sx = tonumber(pData.scaleX) or 1
-								local sy = tonumber(pData.scaleY) or 1
-								local sz = tonumber(pData.scaleZ) or 1
 								local mesh = obj:FindFirstChildWhichIsA("SpecialMesh")
 								if mesh then
-									mesh.Scale = Vector3.new(sx, sy, sz)
+									mesh.Scale = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
 								else
-									obj.Size = Vector3.new(sx, sy, sz)
+									obj.Size = Vector3.new(pData.scaleX, pData.scaleY, pData.scaleZ)
 								end
 							end
 						elseif obj:IsA("Weld") or obj:IsA("ManualWeld") or obj:IsA("WeldConstraint") or obj:IsA("Attachment") then
@@ -831,8 +742,6 @@ idBox.FocusLost:Connect(function()
 		local incomingID = tonumber(idBox.Text)
 		if incomingID and incomingID ~= accessoryList[boundIdSlot].id then
 			accessoryList[boundIdSlot].id = incomingID
-			accessoryList[boundIdSlot].extracted = nil
-			accessoryList[boundIdSlot].extractedVisuals = nil
 			scanAssetAndPopulateData(boundIdSlot)
 			if selectedIndex == boundIdSlot then
 				selectedSubPartName = "Handle"
@@ -1315,7 +1224,7 @@ saveBtn.Parent = savePanel
 
 saveBtn.MouseButton1Click:Connect(function()
 	commitHpThreshold()
-	local name = sanitizePresetName(presetNameBox.Text)
+	local name = presetNameBox.Text
 	if name ~= "" and name ~= "PresetName" and name ~= "Saved!" and name ~= "Updated!" and HAS_FILESYSTEM then
 		local targetFilePath = FOLDER_NAME .. "/" .. name .. ".txt"
 		local fileExists = pcall(function() return readfile(targetFilePath) end)
