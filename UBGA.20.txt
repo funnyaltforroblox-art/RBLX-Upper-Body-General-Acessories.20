@@ -1344,4 +1344,4 @@ end)
 if player.Character then
 	task.spawn(applyAllAccessories)
 end
-print("We WE FOUND THE PROBLEMMMMMM!!!!ri")
+print("We WE FEXTRUDED UPDATED THE PROBLEMMMMMM!!!!ri")
